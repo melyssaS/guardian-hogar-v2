@@ -83,6 +83,17 @@ Toda **decisión crítica requiere validación humana** explícita.
 Agentes especializados —**analista, desarrollador, revisor QA**— con **revisión
 independiente y colaboración verificable**.
 
+#### Catálogo de agentes
+
+| Agente | Responsabilidad | Permisos |
+|--------|-----------------|----------|
+| **analista-requisitos** | Revisa specs, criterios de aceptación, ambigüedades y consistencia. | **Solo lectura.** No modifica código ni artefactos. |
+| **desarrollador-hu** | Implementa las tareas aprobadas con **TDD** (prueba roja antes de implementar) y corrige los hallazgos del revisor. | Lectura y escritura de código y pruebas. Solo sobre tareas ya aprobadas. |
+| **revisor-qa-seguridad** | Revisa de forma **independiente**, ejecuta las pruebas y verifica seguridad. **Puede rechazar** y devolver el trabajo al desarrollador. | Lectura de todo; ejecuta pruebas. No implementa funcionalidades; emite veredicto. |
+
+> La revisión del **revisor-qa-seguridad** es independiente de quien implementa
+> (**desarrollador-hu**): un mismo agente no cumple ambos roles sobre la misma HU.
+
 ### XV. Evidencias reales
 **Solo evidencias reales.** **Prohibido fabricar registros** o resultados.
 

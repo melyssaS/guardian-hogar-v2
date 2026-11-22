@@ -9,6 +9,7 @@
 - React Testing Library (pruebas de componentes)
 - Playwright (pruebas E2E — prioritario)
 - ESLint + Prettier
+- Docker (contenedor de ejecución — dev con Vite, demo con nginx)
 
 ## Estructura
 ```
@@ -23,9 +24,20 @@ packages/frontend/
 ├── tests/
 │   ├── components/         React Testing Library
 │   └── e2e/                Playwright
+├── Dockerfile              multi-stage: build Vite → nginx estático
 ├── tsconfig.json
 └── package.json
 ```
+
+## Docker
+El frontend se ejecuta en contenedor para evitar instalar Node o npm en la máquina local. Dos modos:
+
+- **Demo/prod (imagen compilada)** — `packages/frontend/Dockerfile` multi-stage:
+  - `build`: `node:20-slim`, compila `@home-guardian/domain` y ejecuta `vite build`.
+  - `runtime`: `nginx:alpine` sirviendo los estáticos, con `try_files` para rutas SPA y proxy `/api` hacia el backend.
+- **Desarrollo (hot reload)** — no usa el Dockerfile de nginx: el override `docker-compose.dev.yml` corre `vite dev --host` en el puerto 5173 con el código montado como bind mount.
+- **Orquestación** con `docker-compose.yml` (base) y `docker-compose.dev.yml` (override con hot reload). Usar un volumen anónimo sobre `node_modules` para que el bind mount del host no lo pise.
+- **Variables de entorno** (`VITE_API_URL`, etc.) desde `.env` en la raíz — nunca hardcodeadas. `.env` siempre en `.gitignore`.
 
 ## Páginas y su HU
 | Página | HU |
@@ -65,3 +77,4 @@ Dejar placeholder en el lugar exacto:
 - No llamar al backend directamente desde componentes
 - No credenciales en código fuente
 - No implementar HU reservadas antes de la demo
+- No secretos ni credenciales dentro del Dockerfile — siempre desde `.env`

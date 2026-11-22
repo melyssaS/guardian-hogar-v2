@@ -16,6 +16,7 @@
 - Supertest + PostgreSQL real (pruebas de integración en CI)
 - Playwright (pruebas E2E de humo)
 - ESLint + Prettier (calidad)
+- Docker (contenedor de ejecución — dev y demo)
 
 ## Estructura de carpetas
 ```
@@ -35,9 +36,24 @@ packages/backend/
 ├── tests/
 │   ├── unit/
 │   └── integration/
+├── Dockerfile          multi-stage: deps → build → runtime Node 20
 ├── tsconfig.json
 └── package.json
 ```
+
+## Docker
+El backend se ejecuta en contenedor para evitar instalar Node, npm o Prisma en la máquina local. Se usa tanto en desarrollo (hot reload) como en demo (imagen compilada).
+
+- **Dockerfile multi-stage** en `packages/backend/Dockerfile`:
+  - `deps`: `node:20-slim`, copia los `package.json` del root y de los tres workspaces, `npm ci`.
+  - `build`: compila `@home-guardian/domain` y `backend`, ejecuta `prisma generate`.
+  - `runtime`: solo `dist` + dependencias de producción + Prisma Client. Incluir `openssl` (requerido por Prisma en imágenes slim).
+- **Base de datos SQLite en volumen nombrado** (ej. `guardian-db:/data`) con `DATABASE_URL=file:/data/dev.db`. Nunca dejar el archivo `.db` dentro del contenedor sin volumen — se perdería en cada rebuild.
+- **Arranque del contenedor**: `prisma migrate deploy` (o `db push` en dev) y luego `node dist/...`.
+- **Orquestación** con `docker-compose.yml` (base, demo/prod con imágenes compiladas) y `docker-compose.dev.yml` (override con hot reload vía `tsx watch` y bind mount de `./packages`).
+- **Hot reload en dev**: montar el código como bind mount y usar un volumen anónimo sobre `node_modules` para que el host no lo pise.
+- **Variables de entorno** desde `.env` en la raíz — nunca hardcodeadas en el Dockerfile. `.env` siempre en `.gitignore`.
+- Nota de fidelidad: en Docker local se usa SQLite en volumen; para producción real (Render) se mantiene PostgreSQL según la arquitectura.
 
 ## Principios SOLID aplicados
 - **S**: controladores solo reciben y responden — delegan a servicios
@@ -75,3 +91,5 @@ packages/backend/
 - No llamadas a Prisma directamente desde controladores
 - No secretos hardcodeados
 - No implementar HU-06 a HU-10 en línea base
+- No secretos ni credenciales dentro del Dockerfile — siempre desde `.env`
+- No dejar la base SQLite fuera de un volumen nombrado

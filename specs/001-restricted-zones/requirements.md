@@ -1,4 +1,4 @@
-# Spec 01 — Zonas restringidas (`01-restricted-zones`)
+# Spec 001 — Zonas restringidas (`001-restricted-zones`)
 # Requirements Document
 **Fase MADA:** ENTENDER
 **HU cubiertas:** HU-01, HU-02

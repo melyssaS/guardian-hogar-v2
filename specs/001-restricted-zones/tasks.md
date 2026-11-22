@@ -1,4 +1,4 @@
-# Implementation Plan: Zonas restringidas (01-restricted-zones)
+# Implementation Plan: Zonas restringidas (001-restricted-zones)
 
 **Fase MADA:** CONSTRUIR
 **HU cubiertas:** HU-01, HU-02

@@ -47,13 +47,20 @@ frontend ni base de datos real.
 | `RECOVERING` | Transición controlada de salida de `SAFE_STOP`/`DEGRADED` hacia `IDLE`. |
 
 ### 2.2 Tabla de transiciones permitidas
-| Desde \ Evento | mueve+AUTHORIZED | denegación | datos insuficientes | recover válido | arranque MOVING persistido |
-|----------------|------------------|------------|---------------------|----------------|----------------------------|
-| `IDLE` | → `MOVING` | → `SAFE_STOP` | → `DEGRADED` | — | — |
-| `MOVING` | → `MOVING` | → `SAFE_STOP` | → `DEGRADED` | — | → `SAFE_STOP` |
-| `SAFE_STOP` | **prohibido** | `SAFE_STOP` | `SAFE_STOP` | → `RECOVERING` | — |
-| `DEGRADED` | **prohibido** | → `SAFE_STOP` | `DEGRADED` | → `RECOVERING` | — |
-| `RECOVERING` | — | → `SAFE_STOP` | → `DEGRADED` | → `IDLE` | — |
+| Desde \ Evento | mueve+AUTHORIZED | movimiento completado | denegación | datos insuficientes | recover válido | arranque MOVING persistido |
+|----------------|------------------|-----------------------|------------|---------------------|----------------|----------------------------|
+| `IDLE` | → `MOVING` | — | → `SAFE_STOP` | → `DEGRADED` | — | — |
+| `MOVING` | — (`BUSY`) | **completado → `IDLE`** | → `SAFE_STOP` | → `DEGRADED` | — | → `SAFE_STOP` |
+| `SAFE_STOP` | **prohibido** | — | `SAFE_STOP` | `SAFE_STOP` | → `RECOVERING` | — |
+| `DEGRADED` | **prohibido** | — | → `SAFE_STOP` | `DEGRADED` | → `RECOVERING` | — |
+| `RECOVERING` | — | — | → `SAFE_STOP` | → `DEGRADED` | → `IDLE` | — |
+
+> **Movimiento completado (MOVING → IDLE):** en este prototipo el movimiento autorizado se
+> completa de forma **inmediata** dentro de la misma solicitud. Por tanto, una solicitud
+> autorizada recorre `IDLE → MOVING → IDLE` y el robot queda de nuevo en `IDLE`, listo para el
+> siguiente movimiento. El estado `MOVING` es transitorio y se persiste `IDLE` al finalizar.
+> La celda `MOVING + mueve = BUSY` solo aplica al caso concurrente (una segunda solicitud
+> llega mientras una primera sigue en curso), que en el prototipo síncrono no debería darse.
 
 ### 2.3 Transiciones prohibidas (invariantes de seguridad)
 - **P-1:** `SAFE_STOP → MOVING` está prohibido. La única salida de `SAFE_STOP` es vía
@@ -66,9 +73,11 @@ frontend ni base de datos real.
 Dada una solicitud de movimiento, el vigilante evalúa en este **orden estricto** y se detiene
 en la primera condición que aplique:
 
-1. **Estado del robot.** Si el estado no admite movimiento (`SAFE_STOP`, `DEGRADED`,
-   `RECOVERING`, o `MOVING` ocupado): se rechaza con `SAFE_STOP_ACTIVE` o `BUSY` (según el
-   estado) sin evaluar geometría.
+1. **Estado del robot.** Si el estado no admite movimiento se rechaza sin evaluar geometría:
+   `SAFE_STOP`/`DEGRADED`/`RECOVERING` → `SAFE_STOP_ACTIVE`; un `MOVING` **en curso**
+   (solicitud concurrente) → `BUSY`. Como `MOVING` es transitorio y cada solicitud autorizada
+   termina en `IDLE`, el estado observado entre solicitudes es `IDLE`, no `MOVING`; por eso un
+   movimiento exitoso **no** bloquea al siguiente.
 2. **Calidad de posición = `UNRELIABLE`** → denegación `INSUFFICIENT_DATA` (sin geometría).
 3. **Calidad de posición = `MISSING`** → denegación `MISSING_POSITION` (sin geometría).
 4. **Fallo del repositorio de zonas** → denegación `ZONE_DATA_UNAVAILABLE` (sin geometría).
@@ -93,11 +102,37 @@ en la primera condición que aplique:
 - La **recuperación** solo ocurre vía `POST /api/robot/recover`, y solo si la posición es
   **segura** (fuera de toda zona) y los **datos son confiables**.
 
-## 5. Reinicio seguro (ADR-10)
+## 5. Aporte de lecturas de posición y reinicio seguro (ADR-10)
 
-- Al arrancar el servicio, `positionQuality = MISSING` hasta recibir una posición confiable.
-- Si al arrancar hay un estado `MOVING` persistido, se degrada a `SAFE_STOP` (no se reanuda
-  un movimiento a ciegas).
+### 5.1 Cómo `positionQuality` llega a `RELIABLE`
+El robot no puede moverse ni recuperarse con `positionQuality` en `MISSING`/`UNRELIABLE`. Dado
+que los sensores reales quedan **reservados para HU-06**, en la línea base se provee una **vía
+explícita** para aportar una lectura confiable:
+
+- **`POST /api/robot/position`** con `{ position: {x,y}, quality: 'RELIABLE' }` registra una
+  lectura confiable y fija `positionQuality = RELIABLE` y la posición del robot.
+- El **seed** de la base de datos arranca el robot en una posición válida con
+  `positionQuality = RELIABLE`, de modo que la demo pueda mover el robot desde el primer uso.
+- Al **arrancar**, el servicio parte con `positionQuality = RELIABLE` y estado `IDLE` (seed),
+  de modo que la demo pueda mover el robot desde el primer uso. `positionQuality` solo pasa a
+  `MISSING` cuando se recibe una **señal de pérdida explícita** (ADR-10).
+
+> Esta vía es el **sustituto de prototipo** de la telemetría de sensores (HU-06): no simula un
+> sensor, solo permite inyectar una lectura confiable de forma explícita y auditable.
+
+### 5.2 Reinicio seguro (ADR-10)
+- El servicio **arranca** con `positionQuality = RELIABLE` y estado `IDLE` (seed). No se pone
+  `MISSING` por el simple hecho de reiniciar.
+- `positionQuality` pasa a `MISSING` **solo** ante una **señal de pérdida de posición
+  explícita** (p. ej. `POST /api/robot/position` con `quality = MISSING`/`UNRELIABLE`), y
+  entonces se exige una nueva lectura confiable antes de volver a moverse.
+- Si al arrancar hay un estado `MOVING` persistido, se degrada a `SAFE_STOP` (no se reanuda un
+  movimiento a ciegas).
+
+> **Lección PD-09 ("Decidir antes de empezar"):** en una iteración previa el robot quedaba
+> detenido sin salida porque no existía forma de aportar una lectura confiable antes de
+> recuperar. Esta spec incluye desde el inicio la validación de lecturas y una vía explícita
+> para aportarlas, evitando el bloqueo permanente.
 
 ## Requirements
 
@@ -112,7 +147,7 @@ a zonas restringidas.
 3. WHEN el destino está dentro de una zona activa THEN el vigilante SHALL denegar con `RESTRICTED_ZONE_VIOLATION`.
 4. WHEN la trayectoria origen→destino cruza una zona activa y ni el origen ni el destino están dentro de una zona THEN el vigilante SHALL denegar con `TRAJECTORY_CROSSES_ZONE`.
 7. IF el origen o el destino están dentro de una zona activa y además la trayectoria cruza otra zona THEN el vigilante SHALL priorizar el chequeo de origen/destino y denegar con `ORIGIN_IN_RESTRICTED_ZONE` o `RESTRICTED_ZONE_VIOLATION` (origen antes que destino, y ambos antes que trayectoria).
-5. WHEN ninguna condición de denegación aplica THEN el vigilante SHALL responder `AUTHORIZED` y permitir la transición a `MOVING`.
+5. WHEN ninguna condición de denegación aplica THEN el vigilante SHALL responder `AUTHORIZED`, actualizar la posición al destino y dejar el robot de nuevo en `IDLE` (el estado `MOVING` es transitorio y se completa en la misma solicitud), de modo que un movimiento exitoso no bloquee al siguiente.
 6. WHEN el vigilante evalúa la geometría THEN el sistema SHALL reutilizar `isCollision` de la spec 001 y NO SHALL recalcular la geometría por su cuenta.
 
 ### Requirement 2: Orden de evaluación y prioridad de datos sobre geometría (HU-04)
@@ -121,7 +156,7 @@ que anteponga la calidad de los datos a la geometría, para que la decisión sea
 segura.
 
 #### Acceptance Criteria
-1. WHEN el estado del robot no admite movimiento THEN el vigilante SHALL rechazar la solicitud con `SAFE_STOP_ACTIVE` o `BUSY` antes de evaluar la geometría.
+1. WHEN el estado del robot no admite movimiento THEN el vigilante SHALL rechazar la solicitud antes de evaluar la geometría, devolviendo `BUSY` si el robot está en `MOVING` (un movimiento en curso) y `SAFE_STOP_ACTIVE` si está en `SAFE_STOP`, `DEGRADED` o `RECOVERING`.
 2. IF `positionQuality` es `UNRELIABLE` THEN el vigilante SHALL denegar con `INSUFFICIENT_DATA` sin evaluar la geometría.
 3. IF `positionQuality` es `MISSING` THEN el vigilante SHALL denegar con `MISSING_POSITION` sin evaluar la geometría.
 4. IF el repositorio de zonas falla THEN el vigilante SHALL denegar con `ZONE_DATA_UNAVAILABLE` sin evaluar la geometría.
@@ -162,8 +197,10 @@ queden registradas, para mantener la trazabilidad.
 para no reanudar movimientos tras un reinicio.
 
 #### Acceptance Criteria
-1. WHEN el servicio arranca THEN el sistema SHALL inicializar `positionQuality` en `MISSING` hasta recibir una posición confiable.
-2. IF al arrancar existe un estado `MOVING` persistido THEN el sistema SHALL transicionar el robot a `SAFE_STOP` y NO SHALL reanudar el movimiento.
+1. WHEN el servicio arranca THEN el sistema SHALL iniciar con `positionQuality = RELIABLE` y estado `IDLE` (seed), de modo que la demo pueda mover el robot desde el primer uso.
+2. IF se recibe una señal de pérdida de posición explícita (`POST /api/robot/position` con `quality` igual a `MISSING` o `UNRELIABLE`) THEN el sistema SHALL poner `positionQuality` en ese valor y exigir una nueva lectura confiable antes de volver a moverse.
+3. IF al arrancar existe un estado `MOVING` persistido THEN el sistema SHALL transicionar el robot a `SAFE_STOP` y NO SHALL reanudar el movimiento.
+4. WHEN el servicio arranca de forma normal (sin señal de pérdida) THEN el sistema NO SHALL poner `positionQuality` en `MISSING` por el solo hecho de reiniciar.
 
 ### Requirement 7: Contrato, robustez y verificabilidad (RNF)
 **User Story:** Como desarrollador, quiero un contrato validado y una decisión verificable
@@ -175,6 +212,17 @@ sin infraestructura, para probar el vigilante de forma aislada.
 3. WHEN se evalúa la decisión del vigilante THEN la lógica SHALL ser pura y determinista (misma entrada → misma decisión) y ejecutable sin frontend ni base de datos real.
 4. WHEN se define la prueba T-12 THEN el sistema SHALL contar con los 28 escenarios (A..G) definidos y ejecutables sin frontend ni base de datos real; para considerar cumplido este criterio basta con que estén definidos y sean ejecutables, sin exigir una corrida real registrada.
 
+### Requirement 8: Aporte explícito de lectura de posición (HU-05, ADR-10)
+**User Story:** Como responsable de seguridad, quiero una vía explícita para aportar una
+lectura de posición confiable, para que el robot pueda moverse y recuperarse sin depender de
+los sensores reservados para HU-06.
+
+#### Acceptance Criteria
+1. WHEN se solicita `POST /api/robot/position` con una posición válida y `quality = RELIABLE` THEN el sistema SHALL fijar la posición del robot y `positionQuality = RELIABLE`.
+2. IF el payload de posición es inválido o `quality` no es un valor admitido THEN el sistema SHALL rechazar con `422` y NO SHALL cambiar la posición ni la calidad.
+3. WHEN `positionQuality` pasa a `RELIABLE` y el robot está en `IDLE` THEN un movimiento posterior SHALL poder evaluarse por geometría (ya no se deniega por datos).
+4. WHEN se aporta una lectura de posición THEN el sistema NO SHALL simular un sensor real; la vía es un sustituto de prototipo, explícito y auditable, de la telemetría reservada para HU-06.
+
 ## 6. Contrato de API
 
 Base: `/api/robot` e `/api/incidents`
@@ -184,6 +232,7 @@ Base: `/api/robot` e `/api/incidents`
 |--------|------|-------------|
 | `GET` | `/api/robot/state` | Estado, posición y `positionQuality` actuales |
 | `POST` | `/api/robot/move` | Evaluar y (si procede) autorizar un movimiento |
+| `POST` | `/api/robot/position` | Aportar una lectura de posición confiable (fija `positionQuality`) |
 | `POST` | `/api/robot/recover` | Recuperación explícita y validada |
 | `GET` | `/api/incidents` | Listar incidentes registrados |
 
@@ -196,6 +245,18 @@ Respuesta `AUTHORIZED` (200):
 ```json
 { "decision": "AUTHORIZED", "state": "MOVING", "position": { "x": 250.0, "y": 175.0 } }
 ```
+
+#### `POST /api/robot/position`
+Request:
+```json
+{ "position": { "x": 120.0, "y": 90.0 }, "quality": "RELIABLE" }
+```
+Respuesta (200):
+```json
+{ "state": "IDLE", "position": { "x": 120.0, "y": 90.0 }, "positionQuality": "RELIABLE" }
+```
+> Tras un reinicio (`positionQuality = MISSING`), esta llamada restablece una lectura
+> confiable para poder mover/recuperar. El seed ya la deja en `RELIABLE` para la demo.
 Respuesta de denegación geométrica (200, decisión en cuerpo):
 ```json
 {

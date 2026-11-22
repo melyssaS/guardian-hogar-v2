@@ -68,6 +68,12 @@ export interface GuardianDecision {
   collisionType: CollisionType | null;  // reutilizado de spec 001
   reason: string;
 }
+
+// Lectura de posición aportada explícitamente (sustituto de prototipo de HU-06).
+export interface PositionReading {
+  position: Point;
+  quality: PositionQuality;   // en la línea base se admite 'RELIABLE'
+}
 ```
 
 ### 2. Regla pura del vigilante — `rules/guardian.ts`
@@ -84,7 +90,8 @@ export function evaluateMovement(input: GuardianInput): GuardianDecision {
   // 5-7. geometría: para cada zona activa, isCollision(zone, {origin,destination}, pad)
   //      ORIGIN_IN_RESTRICTED_ZONE | RESTRICTED_ZONE_VIOLATION | TRAJECTORY_CROSSES_ZONE
   //      (respeta prioridad de isCollision: origen > destino > trayectoria) → SAFE_STOP
-  // 8. AUTHORIZED → nextState MOVING
+  // 8. AUTHORIZED → nextState MOVING (transitorio). El movimiento se completa de forma
+  //    inmediata en el servicio; el estado persistido final es IDLE (ver §4).
 }
 ```
 > Pura y determinista (R7.3): salida función de las entradas. No persiste ni registra; eso lo
@@ -102,6 +109,10 @@ export function canTransition(from: RobotStateName, to: RobotStateName,
 }
 export function applyDecision(current: RobotStateName,
                               decision: GuardianDecision): RobotStateName;
+
+// Movimiento completado: MOVING -> IDLE. En el prototipo síncrono el servicio invoca
+// completeMove inmediatamente tras un AUTHORIZED, por lo que el estado persistido es IDLE.
+export function completeMove(current: RobotStateName): RobotStateName; // MOVING -> IDLE
 ```
 
 ### 4. Servicio — `services/guardianService.ts`
@@ -110,6 +121,9 @@ Orquesta (SOLID-D, inyección manual de repositorios):
 2. Carga zonas activas de `zoneRepository`; si lanza, pasa `zones = null`.
 3. Llama a `evaluateMovement`.
 4. Aplica la transición con `applyDecision`/`canTransition` y persiste el nuevo estado.
+   En `AUTHORIZED`, actualiza la posición al destino y, como el movimiento se completa de
+   inmediato, invoca `completeMove` (`MOVING → IDLE`) persistiendo `IDLE`; así el siguiente
+   movimiento no se rechaza con `BUSY`.
 5. **Registra la evaluación** (siempre) con `collisionType`/causa y **snapshot de zonas**.
 6. Si la decisión es una **denegación que para** (no un mero rechazo por estado), **crea un
    incidente** y devuelve su `incidentId`.
@@ -123,13 +137,26 @@ Orquesta (SOLID-D, inyección manual de repositorios):
 // Fuera de parada → idempotente/rechazo sin efectos (R4.3).
 ```
 
+### 5b. Aporte de lectura de posición — `POST /api/robot/position`
+```ts
+// Valida PositionReading con Zod (quality admitido; position dentro del plano).
+// Fija robotRepository.position = reading.position y positionQuality = reading.quality.
+// Es la vía explícita para que positionQuality llegue a 'RELIABLE' sin sensores (HU-06
+// reservada). No evalúa geometría de movimiento; solo registra la lectura.
+```
+> Resuelve el bloqueo PD-09: sin esta vía, tras el arranque (`MISSING`) el robot nunca podría
+> moverse ni recuperarse. El seed deja `RELIABLE`; solo el reinicio vuelve a `MISSING`.
+
 ### 6. Reinicio seguro (ADR-10) — `db/bootstrap.ts`
-Al arrancar: `positionQuality = MISSING`; si el estado persistido es `MOVING` → `SAFE_STOP`.
+Al **arrancar**: el robot parte con `positionQuality = RELIABLE` y estado `IDLE` (seed). No se
+pone `MISSING` por el solo hecho de reiniciar; `positionQuality` pasa a `MISSING`/`UNRELIABLE`
+**solo** ante una señal de pérdida explícita (`POST /api/robot/position`). Si el estado
+persistido es `MOVING` → `SAFE_STOP` (no se reanuda un movimiento a ciegas).
 
 ### 7. Controllers y rutas
 ```
 packages/backend/src/
-├── controllers/robotController.ts      # state, move, recover
+├── controllers/robotController.ts      # state, move, recover, position
 ├── controllers/incidentController.ts   # list incidents
 ├── services/guardianService.ts
 ├── rules/guardian.ts                   # evaluateMovement (pura)
@@ -138,17 +165,19 @@ packages/backend/src/
 ├── repositories/incidentRepository.ts  # append-only
 ├── routes/robotRoutes.ts               # /api/robot/*
 ├── routes/incidentRoutes.ts            # /api/incidents
-├── schemas/robot.schema.ts             # moveSchema
+├── schemas/robot.schema.ts             # moveSchema, positionSchema
 └── db/bootstrap.ts                     # reinicio seguro
 ```
 
 #### Mapeo decisión → HTTP (controller)
 | Decisión | HTTP | Cuerpo |
 |----------|------|--------|
-| `AUTHORIZED` | 200 | estado MOVING + posición destino |
+| `AUTHORIZED` | 200 | nueva posición + estado `IDLE` (MOVING transitorio, completado) |
 | Denegación geométrica / por datos | 200 | `decision: DENIED` + `code`/`collisionType` + `incidentId` |
 | Rechazo por estado (`SAFE_STOP_ACTIVE`/`BUSY`) | 409 | `decision: REJECTED` + `code` + estado |
-| payload inválido | 422 | `{ code: 'INVALID_DESTINATION', message }` |
+| `POST /position` OK | 200 | posición + `positionQuality` |
+| `POST /recover` OK | 200 | estado `IDLE` + posición |
+| payload inválido | 422 | `{ code: 'INVALID_DESTINATION' | 'INVALID_POSITION', message }` |
 
 ## Data Models
 
@@ -189,6 +218,9 @@ CREATE TABLE IF NOT EXISTS audit_log (
 -- Añade la columna de calidad de posición al estado del robot.
 ALTER TABLE robot_state ADD COLUMN position_quality TEXT NOT NULL DEFAULT 'MISSING';
 ```
+> El **seed** inserta el robot con `position_quality = 'RELIABLE'` y una posición válida.
+> El `DEFAULT 'MISSING'` solo aplica a filas no sembradas; el arranque normal conserva
+> `RELIABLE` del seed y solo una señal de pérdida explícita lo cambia (ADR-10, `db/bootstrap.ts`).
 
 ## Error Handling
 
@@ -239,7 +271,7 @@ Cada denegación que para crea exactamente un incidente; un rechazo por estado
 **Validates: Requirements 5.2, 5.3**
 
 ### Property 7: Reinicio seguro
-Tras el arranque, `positionQuality` es `MISSING` y un `MOVING` persistido queda en `SAFE_STOP`.
+Tras el arranque, `positionQuality` es `RELIABLE` (seed) y un `MOVING` persistido queda en `SAFE_STOP`; `MISSING` solo ocurre ante una señal de pérdida explícita.
 
 **Validates: Requirements 6.1, 6.2**
 
@@ -249,6 +281,20 @@ Para las mismas entradas (`state`, `positionQuality`, `origin`, `destination`, `
 
 **Validates: Requirements 7.3**
 
+### Property 9: Vivacidad del movimiento (sin bloqueo en MOVING)
+Un movimiento `AUTHORIZED` deja el robot en `IDLE` al completarse (MOVING es transitorio);
+por tanto, dos movimientos válidos consecutivos ambos pueden autorizarse y ninguno se rechaza
+con `BUSY` por culpa del anterior.
+
+**Validates: Requirements 1.5**
+
+### Property 10: Una lectura confiable habilita el movimiento
+Si `positionQuality` es `MISSING`/`UNRELIABLE` (por una señal de pérdida explícita) y luego se aporta una lectura con
+`quality = RELIABLE` vía `POST /api/robot/position`, entonces un movimiento posterior a un
+destino libre deja de denegarse por datos y puede autorizarse (no hay bloqueo permanente).
+
+**Validates: Requirements 8.1, 8.3**
+
 ## Testing Strategy
 
 | Nivel | Objetivo | Casos |
@@ -256,7 +302,9 @@ Para las mismas entradas (`state`, `positionQuality`, `origin`, `destination`, `
 | Unit (rules) | `evaluateMovement` + `stateMachine` | **T-12**: A(9), B(5), C(3), D(r=10, 5), E(m=5, 3), F(2), G(1) = 28 |
 | Unit (rules) | transiciones prohibidas | P-1, P-2 explícitas |
 | Unit (service) | orquestación | registro siempre, incidente solo en denegación, rechazo sin incidente, recover válido/ inválido, bootstrap ADR-10 |
-| Integración (Supertest) | `/api/robot`, `/api/incidents` | state, move 200/409/422, recover, incidents append-only |
+| Unit (rules) | vivacidad MOVING→IDLE | dos movimientos válidos seguidos, ambos AUTHORIZED |
+| Integración (Supertest) | `/api/robot`, `/api/incidents` | state, move 200/409/422, position, recover, incidents append-only |
+| Integración (Supertest) | habilitación por lectura | tras reinicio MISSING → position RELIABLE → move AUTHORIZED |
 | (UI la cubre la spec 003) | — | — |
 
 > T-12 usa un **doble de `zoneRepository`** (zonas en memoria; caso G simula el fallo) y un
@@ -274,6 +322,8 @@ Para las mismas entradas (`state`, `positionQuality`, `origin`, `destination`, `
 | DD-206 | Recuperación solo vía `recover` con doble validación | Auto-recuperación | Salida explícita y validada de SAFE_STOP (P-1) |
 | DD-207 | Reinicio seguro degrada `MOVING`→`SAFE_STOP` (ADR-10) | Reanudar movimiento | No mover a ciegas tras reinicio |
 | DD-208 | Reutilizar `isCollision`/`CollisionType` (spec 001) | Reimplementar geometría | Fuente única; sin duplicación |
+| DD-209 | `MOVING` transitorio; el servicio completa a `IDLE` en la misma solicitud | Dejar `MOVING` persistente | Evita bloqueo `BUSY` permanente tras el primer movimiento (defecto corregido) |
+| DD-210 | `POST /api/robot/position` + seed `RELIABLE`; reinicio → `MISSING` | Esperar sensores (HU-06) | Sustituto de prototipo explícito; evita el bloqueo PD-09 sin salida |
 
 ## Dependencias entre HU
 - HU-04/HU-05 dependen de la spec 001 (geometría). La spec 003 consume este contrato.

@@ -1,0 +1,35 @@
+{
+  "name": "guardian-hogar",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/domain",
+    "packages/backend",
+    "packages/frontend"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build:domain": "npm run build -w @home-guardian/domain",
+    "build": "npm run build:domain && npm run build -w @home-guardian/backend && npm run build -w @home-guardian/frontend",
+    "typecheck": "npm run build:domain && npm run typecheck --workspaces",
+    "test": "npm run build:domain && npm run test --workspaces",
+    "test:e2e": "npm run build:domain && npm run test:e2e -w @home-guardian/frontend",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "dev:backend": "npm run dev -w @home-guardian/backend",
+    "dev:frontend": "npm run dev -w @home-guardian/frontend"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "eslint": "^9.17.0",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "globals": "^15.14.0",
+    "prettier": "^3.4.2",
+    "typescript": "~5.7.2",
+    "typescript-eslint": "^8.18.2",
+    "vitest": "^4.1.11"
+  }
+}

@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@home-guardian/domain": "0.1.0",
-    "better-sqlite3": "^11.7.0",
+    "better-sqlite3": "^13.2.0",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",

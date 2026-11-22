@@ -88,9 +88,25 @@ export interface Segment { from: Point; to: Point; }
 ```ts
 export const FLOOR_WIDTH = 1000;
 export const FLOOR_HEIGHT = 800;
-export const ROBOT_RADIUS = 20;   // r — robot pequeño-mediano
-export const SAFETY_MARGIN = 10;  // m — holgura; pad total r+m = 30
+
+// r y m son CONFIGURABLES por variable de entorno; por defecto 0.
+// Sin configuración, pad = r + m = 0 → la zona no se expande.
+function envNumber(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+export const ROBOT_RADIUS = envNumber('ROBOT_RADIUS', 0);  // r — por defecto 0
+export const SAFETY_MARGIN = envNumber('SAFETY_MARGIN', 0); // m — por defecto 0
+export const COLLISION_PAD = ROBOT_RADIUS + SAFETY_MARGIN;  // pad total r + m
 ```
+
+> Las constantes `ROBOT_RADIUS` y `SAFETY_MARGIN` se leen de las variables de entorno del
+> mismo nombre y valen `0` por defecto. Las pruebas y specs que necesitan expansión fijan el
+> `pad` de forma explícita (ver `isCollision` con `pad` opcional, §3.3), por lo que no
+> dependen del valor por defecto ni de que el entorno esté configurado.
 
 ### 3.3 Geometría pura (DD-001 — AABB conservador)
 
@@ -120,24 +136,52 @@ export function segmentIntersectsAABB(s: Segment, b: AABB): boolean {
   // rechazo cuando p==0 && q<0 (paralelo y fuera).
   // aceptación con bordes inclusivos (<=, >=).
 }
+```
 
-// Padding total aplicado a la zona.
-export const COLLISION_PAD = ROBOT_RADIUS + SAFETY_MARGIN;
+```ts
+// Causa de la colisión. La spec 002 (Vigilante) mapea cada tipo a su respuesta:
+//   ORIGIN_IN_RESTRICTED_ZONE  → origen dentro de la zona expandida
+//   RESTRICTED_ZONE_VIOLATION  → destino dentro de la zona expandida
+//   TRAJECTORY_CROSSES_ZONE    → la trayectoria interseca la zona expandida
+export type CollisionType =
+  | 'ORIGIN_IN_RESTRICTED_ZONE'
+  | 'RESTRICTED_ZONE_VIOLATION'
+  | 'TRAJECTORY_CROSSES_ZONE';
+
+export interface CollisionResult {
+  collides: boolean;
+  type: CollisionType | null; // null cuando no hay colisión
+}
 
 // API de colisión que consumen las reglas de simulación.
-export function isCollision(zone: Zone, s: Segment): boolean {
-  const box = expandZone(zone, COLLISION_PAD);
-  // origen dentro, destino dentro, o trayectoria interseca
-  return pointInAABB(s.from, box)
-      || pointInAABB(s.to, box)
-      || segmentIntersectsAABB(s, box);
+// `pad` es opcional: por defecto COLLISION_PAD (que depende de r+m del entorno).
+// Las pruebas y la spec 002 pueden pasar un pad explícito para fijar r+m sin
+// depender de variables de entorno.
+export function isCollision(
+  zone: Zone,
+  s: Segment,
+  pad: number = COLLISION_PAD,
+): CollisionResult {
+  const box = expandZone(zone, pad);
+
+  // Orden de prioridad del tipo: origen dentro > destino dentro > trayectoria interseca.
+  if (pointInAABB(s.from, box))
+    return { collides: true, type: 'ORIGIN_IN_RESTRICTED_ZONE' };
+  if (pointInAABB(s.to, box))
+    return { collides: true, type: 'RESTRICTED_ZONE_VIOLATION' };
+  if (segmentIntersectsAABB(s, box))
+    return { collides: true, type: 'TRAJECTORY_CROSSES_ZONE' };
+
+  return { collides: false, type: null };
 }
 ```
 
-> La función `isCollision` cubre los tres criterios del modelo (origen dentro, destino
-> dentro, trayectoria interseca) y es la única consumida por reglas de movimiento futuras.
-> En esta spec se exporta y se prueba (B1–B9), aunque la evaluación en vivo del robot
-> pertenece a otra HU.
+> `isCollision` devuelve **`{ collides, type }`**: además de decir si hay colisión, reporta
+> su **causa** (`CollisionType`). La spec 002 (Vigilante) consume ese `type` directamente
+> para responder `ORIGIN_IN_RESTRICTED_ZONE`, `RESTRICTED_ZONE_VIOLATION` o
+> `TRAJECTORY_CROSSES_ZONE`, sin recalcular la geometría ni modificar esta spec.
+> En esta spec se exporta y se prueba (B1–B9); la evaluación en vivo del robot pertenece a
+> la spec 002.
 
 ### 3.4 Esquemas Zod
 
@@ -307,7 +351,7 @@ zonesApi.remove(id)                     // DELETE
 Propiedades que deben cumplirse siempre (base para pruebas de propiedad y B1–B9):
 
 ### Property 1: Conservadurismo
-Si un punto está dentro de la zona base, `isCollision` es verdadero; la expansión `r+m` nunca reduce el área de colisión.
+Si un punto está dentro de la zona base, `isCollision(...).collides` es verdadero; la expansión `r+m` nunca reduce el área de colisión.
 
 **Validates: Requirements 2.1** (modelo geométrico, regla 1; escenarios B1, B5, B6)
 
@@ -317,17 +361,17 @@ Un punto exactamente en el borde de la zona expandida cuenta como colisión (`�
 **Validates: Requirements 2.2** (modelo geométrico, regla 2; escenarios B5, B8)
 
 ### Property 3: Origen dentro
-Si el origen del segmento está dentro de la zona expandida, `isCollision` es verdadero, independientemente del destino.
+Si el origen del segmento está dentro de la zona expandida, `isCollision(...).collides` es verdadero y `type === 'ORIGIN_IN_RESTRICTED_ZONE'`, independientemente del destino.
 
 **Validates: Requirements 2.4** (modelo geométrico, regla 4; escenario B4)
 
 ### Property 4: Simetría del segmento
-`isCollision(zone, from→to)` es igual a `isCollision(zone, to→from)`.
+El valor `collides` de `isCollision(zone, from→to)` es igual al de `isCollision(zone, to→from)`. El `type` puede diferir según qué extremo quede dentro (p. ej. origen vs destino).
 
 **Validates: Requirements 2.3** (modelo geométrico, regla 3; escenarios B3, B4)
 
 ### Property 5: Segmento degenerado
-Con `from == to`, `isCollision` equivale a `pointInAABB(from, expandida)` y nunca lanza (sin división por cero en Liang-Barsky).
+Con `from == to`, `isCollision(...).collides` equivale a `pointInAABB(from, expandida)` y nunca lanza (sin división por cero en Liang-Barsky).
 
 **Validates: Requirements 2.4** (modelo geométrico, regla 4; escenario B9)
 
@@ -349,13 +393,19 @@ Toda zona persistida cumple `width>0`, `height>0` y queda dentro del plano `FLOO
 | DD-005 | `better-sqlite3` sin ORM + migraciones SQL | Prisma | Constitución art. IX; enunciado pide migraciones SQL |
 | DD-006 | `name UNIQUE` en BD + traducción a 409 | Solo chequeo en servicio | Evita carrera; la BD es la autoridad de unicidad |
 | DD-007 | Validaciones de dominio en servicio, no en Zod | Todo en Zod | Permite `code` HTTP específicos por regla |
+| DD-008 | `r` y `m` configurables por variable de entorno, default `0` | Constantes fijas `20`/`10` | La spec 002 varía `r` y `m` (T-12 grupos D y E); con constantes fijas no podría reproducir esos escenarios |
+| DD-009 | `isCollision` devuelve `{ collides, type }` | Solo `boolean` | El Vigilante (002) necesita la causa para responder `ORIGIN_IN_RESTRICTED_ZONE` / `RESTRICTED_ZONE_VIOLATION` / `TRAJECTORY_CROSSES_ZONE` sin recalcular geometría |
 
 ---
 
 ## 9. Dependencias entre HU
 - HU-01 depende de HU-02 para tener zonas que mostrar; ambas comparten `Zone` y el plano.
-- La geometría (`isCollision`) queda lista aquí pero su uso por el robot pertenece a otra HU
-  (fuera de alcance de esta spec, solo se prueba la función).
+- La geometría (`isCollision`) queda lista aquí pero su uso por el robot pertenece a la
+  spec 002 (fuera de alcance de esta spec, solo se prueba la función).
+- La spec 002 (Vigilante) consume de esta spec: `r` y `m` configurables por variable de
+  entorno y `isCollision` que devuelve `{ collides, type }`. Sus escenarios (grupos D y E
+  del T-12, 28 escenarios) varían `r` y `m`, y usan el `type` para elegir la respuesta. No
+  necesita modificar esta spec ni recalcular geometría.
 
 ---
 

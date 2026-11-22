@@ -14,14 +14,14 @@ aceptación o requisito del `requirements.md`.
 
 - [ ] 1. Definir tipos del dominio `Zone`, `ZoneInput`, `Point`, `Segment`, `AABB` en `@home-guardian/domain`
   - _Requisitos: RF-02, DD-004_
-- [ ] 2. Definir constantes `FLOOR_WIDTH=1000`, `FLOOR_HEIGHT=800`, `ROBOT_RADIUS=20`, `SAFETY_MARGIN=10`, `COLLISION_PAD=30`
-  - _Requisitos: Modelo geométrico_
+- [ ] 2. Definir constantes `FLOOR_WIDTH=1000`, `FLOOR_HEIGHT=800` y leer `ROBOT_RADIUS` y `SAFETY_MARGIN` de variables de entorno con default `0`; derivar `COLLISION_PAD = r + m`
+  - _Requisitos: Modelo geométrico, DD-008_
 - [ ] 3. (TDD, prueba roja primero) Implementar `expandZone` y `pointInAABB` con borde inclusivo
   - _Requisitos: DD-001, DD-003_
 - [ ] 4. (TDD) Implementar `segmentIntersectsAABB` (Liang-Barsky) con manejo de segmento degenerado (origen==destino)
   - _Requisitos: DD-002, B4, B9_
-- [ ] 5. Implementar `isCollision(zone, segment)` combinando origen dentro + destino dentro + trayectoria interseca
-  - _Requisitos: Modelo geométrico (4 reglas)_
+- [ ] 5. Implementar `isCollision(zone, segment, pad?)` que devuelve `{ collides, type }` con `type ∈ {ORIGIN_IN_RESTRICTED_ZONE, RESTRICTED_ZONE_VIOLATION, TRAJECTORY_CROSSES_ZONE} | null`; `pad` opcional (default `COLLISION_PAD`) para fijar `r+m` sin depender del entorno
+  - _Requisitos: Modelo geométrico (4 reglas), DD-009_
 - [ ] 6. Definir esquemas Zod `createZoneSchema`, `updateZoneSchema`, `listZoneQuerySchema` y exportar todo desde `index.ts`
   - _Requisitos: RNF-01, DD-007_
 - [ ] 7. Crear `db/connection.ts` (instancia única `better-sqlite3`)
@@ -56,8 +56,8 @@ aceptación o requisito del `requirements.md`.
   - _Requisitos: RF-02.3, RF-02.4, CA-02.6, CA-02.7_
 - [ ] 22. Integrar `pages/RoomsPage.tsx` (plano + formulario + lista) y refrescar el plano tras cada mutación
   - _Requisitos: RF-01.4_
-- [ ] 23. Pruebas unit de geometría: B1–B9 sobre Z1=(100,100,200,150), más `expandZone`/`pointInAABB`
-  - _Requisitos: Escenarios de borde_
+- [ ] 23. Pruebas unit de geometría: B1–B9 sobre Z1=(100,100,200,150) **fijando `pad=30` (r=20, m=10) explícitamente**, verificando `collides` y el `type` correcto; más `expandZone`/`pointInAABB`
+  - _Requisitos: Escenarios de borde, DD-008, DD-009_
 - [ ] 24. Pruebas unit del servicio: 422 dimensiones, 422 fuera de plano, 409 duplicado, filtro active
   - _Requisitos: CA-02.2, CA-02.3, CA-02.4, CA-02.8_
 - [ ] 25. Pruebas de integración (Supertest): POST 201/409/422, GET lista+filtro, GET:id 200/404, PUT 200/404/409/422, DELETE 204/404

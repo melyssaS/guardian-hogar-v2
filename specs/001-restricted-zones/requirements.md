@@ -37,13 +37,19 @@ Este modelo es compartido por backend y frontend. Reside en `@home-guardian/doma
 | Alto del plano | `FLOOR_HEIGHT` | `800` | Eje Y |
 | Origen | — | `(0, 0)` | Esquina **arriba a la izquierda** |
 | Zona | — | — | Rectángulo `(x, y, width, height)` |
-| Radio del robot | `r` (`ROBOT_RADIUS`) | `20` | Para la expansión conservadora |
-| Margen de seguridad | `m` (`SAFETY_MARGIN`) | `10` | Holgura adicional (pad total `r + m = 30`) |
+| Radio del robot | `r` (`ROBOT_RADIUS`) | `0` | Para la expansión conservadora. Configurable por variable de entorno `ROBOT_RADIUS` |
+| Margen de seguridad | `m` (`SAFETY_MARGIN`) | `0` | Holgura adicional. Configurable por variable de entorno `SAFETY_MARGIN` (pad total `r + m`) |
+
+> **`r` y `m` son configurables por variable de entorno**, con valor por defecto `0`. Sin
+> configuración explícita, la zona no se expande (`pad = r + m = 0`). Los escenarios de
+> prueba y las specs que dependen de la expansión (p. ej. la spec 002) fijan `r` y `m`
+> explícitamente para reproducir sus casos; no dependen del valor por defecto global.
 
 ### Reglas del modelo
 1. **Expansión conservadora (AABB, DD-001):** cada zona se expande `r + m` por lado antes
    de evaluar colisión. Una zona `(x, y, w, h)` se evalúa como
-   `(x - (r+m), y - (r+m), w + 2(r+m), h + 2(r+m))`.
+   `(x - (r+m), y - (r+m), w + 2(r+m), h + 2(r+m))`. Con el valor por defecto
+   (`r = m = 0`) la zona no se expande; `r` y `m` se configuran por variable de entorno.
 2. **El borde pertenece a la zona:** las comparaciones son inclusivas (`≤`, `≥`). Un punto
    exactamente sobre el borde de la zona expandida **está dentro**.
 3. **Dos comprobaciones de colisión:**
@@ -194,7 +200,10 @@ Respuestas:
 ## 7. Escenarios de borde B1–B9
 
 Zona de referencia **Z1 = (x=100, y=100, width=200, height=150)** → rectángulo base con
-la zona expandida por `r + m = 30`. Con Z1, la **caja expandida** va de `(70, 70)` a `(330, 280)`. Cada escenario produce una prueba en Fase VERIFICAR.
+la zona expandida por `r + m = 30`. **Estos escenarios fijan `r = 20` y `m = 10`
+explícitamente** (no usan el valor por defecto `0`), para ejercitar la expansión
+conservadora. Con ese pad, la **caja expandida** de Z1 va de `(70, 70)` a `(330, 280)`.
+Cada escenario produce una prueba en Fase VERIFICAR.
 
 | ID | Descripción | Entrada (origen → destino) | Resultado esperado |
 |----|-------------|----------------------------|--------------------|
@@ -224,7 +233,7 @@ la zona expandida por `r + m = 30`. Con Z1, la **caja expandida** va de `(70, 70
 | Zona | Rectángulo restringido `(x, y, width, height)` donde el robot no debe entrar. |
 | AABB | Axis-Aligned Bounding Box; caja alineada a los ejes usada para colisión. |
 | Zona expandida | Zona ampliada `r + m` por lado (expansión conservadora, DD-001). |
-| `r` / `m` | Radio del robot (`ROBOT_RADIUS=20`) y margen de seguridad (`SAFETY_MARGIN=10`). |
+| `r` / `m` | Radio del robot (`ROBOT_RADIUS`) y margen de seguridad (`SAFETY_MARGIN`). Configurables por variable de entorno, por defecto `0`. |
 | Liang-Barsky | Algoritmo de recorte de segmento contra un AABB para detectar intersección. |
 | Borde inclusivo | El contacto exacto con el borde cuenta como colisión (`≤`, `≥`). |
 

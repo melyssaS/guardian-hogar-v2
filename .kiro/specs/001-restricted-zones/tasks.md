@@ -176,7 +176,8 @@ graph TD
   - _Requisitos: RF-06.3, CA-02.12_
 - [x] RC-14. `[U2]` E2E (Playwright): en «Zonas y reglas» se ve la tarjeta «Catálogo de reglas» con `R-ZONA-01`; tras restringir y permitir «Pasillo», `GET /api/zones/changes` contiene `DEACTIVATE`/`ACTIVATE` de esa zona (el E2E deja el estado como lo encontró)
   - _Requisitos: CA-02.9, CA-02.12_
-- [x] RC-15. `[U2]` Calidad: lint, typecheck y Prettier del repo sin errores, cero `any`; documentar en Notes las decisiones Q-A/Q-C que tome el humano
+  - **[RC-01 rev7]** (alineación 001↔003) El E2E abre la vista de zonas con `page.goto('/#/zonas')`, no con `goto('/')`: la ruta por defecto es `#/supervision` y la dueña de la navegación es la spec 003 (R10, CA-03.37, RC-19). Va en `rooms.spec.ts`, que la 003 RC-19 ya adaptó a esa ruta.
+- [ ] RC-15. `[U2]` Calidad: lint, typecheck y Prettier del repo sin errores, cero `any`; documentar en Notes las decisiones Q-A/Q-C que tome el humano
   - _Requisitos: RNF-02, RNF-06_
 - [x] RC-16. `[U2]` **[RC-01 rev2]** (Prueba roja primero) En `migrate.test.ts`: con 001–012 aplicadas, `migrate` aplica `013_create_zone_change_log.sql` después de 007–012; y si una base ya tiene aplicada `013` y aparece pendiente una migración con número menor, el arranque falla con error claro (endurecimiento Q-G de `migrate.ts`, implementado en la spec 002)
   - _Requisitos: RF-05.5, RA-02, Q-G_

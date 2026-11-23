@@ -484,6 +484,24 @@ describe('SimulationPage', () => {
     );
   });
 
+  it.each([
+    ['#/supervision?robot=2', '2'],
+    ['#/supervision?robot=99', '1'],
+    ['#/supervision?robot=abc', '1'],
+    ['#/supervision', '1'],
+  ])('RC-19 el hash %s preselecciona el robot %s (si no existe, el primero)', async (hash, id) => {
+    install({});
+    window.location.hash = hash;
+    render(<SimulationPage />);
+    await waitFor(() => expect(screen.getByLabelText('Elegir robot')).toHaveValue(id));
+    await waitFor(() =>
+      expect(screen.getByTestId('robot-position')).toHaveTextContent(
+        id === '2' ? '(488, 290)' : '(120, 90)',
+      ),
+    );
+    window.location.hash = '';
+  });
+
   it('RF-04.5 muestra el error si la API falla', async () => {
     vi.stubGlobal(
       'fetch',

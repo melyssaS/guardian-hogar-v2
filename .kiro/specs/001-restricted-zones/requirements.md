@@ -3,7 +3,8 @@
 **Fase MADA:** ENTENDER
 **HU cubiertas:** HU-02 del backlog del prototipo («Configurar zonas restringidas»). El plano 2D,
 identificado como «HU-01» en esta spec, es soporte de HU-02/HU-03 del backlog **[RC-01]**.
-**Estado:** Borrador — implementado; refuerzo RC-01 pendiente de aprobación humana
+**Estado:** Aprobado (2026-11-23) en lo implementado; refuerzo RC-01 (incluida la rev2) pendiente de aprobación humana **[RC-01 rev2]**
+> Estado anterior: «Borrador — implementado; refuerzo RC-01 pendiente de aprobación humana».
 
 > **[RC-01] Nota de numeración.** En el backlog del prototipo (`prototipo/Guardian_Hogar_Artifact_V2.html`)
 > y en el steering (`.kiro/steering/architecture.md`, `frontend.md`), **HU-01 = «Registrar y consultar
@@ -135,12 +136,16 @@ Este modelo es compartido por backend y frontend. Reside en `@home-guardian/doma
   | Id | Regla | Códigos de decisión que cubre |
   |----|-------|-------------------------------|
   | `R-ZONA-01` | No circular por zonas restringidas | `ORIGIN_IN_RESTRICTED_ZONE`, `RESTRICTED_ZONE_VIOLATION`, `TRAJECTORY_CROSSES_ZONE` |
-  | `R-SIGNAL-01` | Posición no confiable o ausente | `INSUFFICIENT_DATA`, `MISSING_POSITION` |
+  | `R-SIGNAL-01` | Posición no confiable o ausente | `INSUFFICIENT_DATA`, `MISSING_POSITION`; **[RC-01 rev2]** y el incidente de pérdida de señal `POSITION_QUALITY_LOST` (Q-B, spec 002) |
   | `R-DATA-01` | Información de zonas no disponible | `ZONE_DATA_UNAVAILABLE` |
 - RF-06.2 Cada código de denegación del vigilante pertenece a **exactamente una** regla; los códigos
   que no son denegaciones (`AUTHORIZED`, `SAFE_STOP_ACTIVE`, `BUSY`) no pertenecen a ninguna.
   `ruleForDecision(code)` devuelve el id de la regla o `null`. La spec 002 la usa para rellenar
   `incidents.rule`.
+  **[RC-01 rev2]** Es la **única** definición de `ruleForDecision` del sistema (I-5): vive en
+  `domain/src/rules/catalog.ts` y la spec 002 la consume, sin reimplementarla. Además de los códigos
+  de denegación, acepta `POSITION_QUALITY_LOST` (incidente de pérdida de señal decidido en Q-B) y
+  devuelve `R-SIGNAL-01`.
 - RF-06.3 La vista «Zonas y reglas» muestra una tarjeta «Catálogo de reglas», **solo lectura**,
   generada a partir de `RULES` (id, título, descripción y HU relacionadas), con el estilo de la
   tarjeta «Catálogo inicial de reglas» del prototipo. No evalúa reglas (constitución art. III).
@@ -286,7 +291,9 @@ Respuestas:
 Zona de referencia **Z1 = (x=100, y=100, width=200, height=150)** → rectángulo base con
 la zona expandida por `r + m = 30`. **Estos escenarios fijan `r = 20` y `m = 10`
 explícitamente** (no usan el valor por defecto `0`), para ejercitar la expansión
-conservadora. Con ese pad, la **caja expandida** de Z1 va de `(70, 70)` a `(330, 280)`.
+conservadora. **[RC-01 rev2] (M-1)** Es un valor **de prueba**: la ejecución por defecto usa
+`r = m = 0` (configurables por entorno); `pad = 30` solo se fija en estos escenarios y en los
+grupos D/E de la T-12 (spec 002). Con ese pad, la **caja expandida** de Z1 va de `(70, 70)` a `(330, 280)`.
 Cada escenario produce una prueba en Fase VERIFICAR.
 
 | ID | Descripción | Entrada (origen → destino) | Resultado esperado |
@@ -326,6 +333,7 @@ Cada escenario produce una prueba en Fase VERIFICAR.
 ## 8. Fuera de alcance
 
 - Autenticación y autorización (se trata en otra HU/spec). **[RC-01]** Ver pregunta abierta Q-A.
+  **[RC-01 rev2]** Decidido: deuda documentada; ver §11b «Riesgos aceptados».
 - **[RC-01]** Interfaz para consultar el historial de cambios de zona (solo API en este refuerzo).
 - Formas de zona no rectangulares (polígonos, círculos).
 - Trayectorias curvas (solo segmentos rectos).
@@ -348,8 +356,10 @@ HU-01, HU-02
 
 ## 10. Compuerta Fase 1 (ENTENDER)
 
-- [ ] El humano aprueba explícitamente este `requirements.md` antes de pasar a DISEÑAR.
-- [ ] **[RC-01]** El humano aprueba el refuerzo RC-01 (RF-05, RF-06, CA-02.9–CA-02.13, rótulo de HU).
+- [x] El humano aprueba explícitamente este `requirements.md` antes de pasar a DISEÑAR.
+  **[RC-01 rev2]** Aprobado el 2026-11-23 en lo implementado (Q-C).
+- [ ] **[RC-01]** El humano aprueba el refuerzo RC-01 (RF-05, RF-06, CA-02.9–CA-02.13, rótulo de HU)
+  y su revisión 2 **[RC-01 rev2]**.
 
 ---
 
@@ -358,6 +368,9 @@ HU-01, HU-02
 ### Q-A — Autenticación del operador
 El backlog del prototipo pide «configuraciones válidas **y autorizadas**» (HU-02) y «solo el operador
 autorizado puede consultarla» (HU-05); el stack de CLAUDE.md incluye bcrypt + JWT en cookie HttpOnly.
+**[RC-01 rev2] Decisión del humano (2026-11-23): deuda documentada** (ver §11b «Riesgos aceptados»).
+La propuesta siguiente se conserva como **referencia futura** para el bloque en que se aborde.
+
 Hoy queda fuera de alcance. **Propuesta, si el humano lo decide** (no se implementa en RC-01):
 - Requisito transversal **RF-07** en esta spec (es la primera del sistema y define el plano y la
   política): un único rol «operador»; `POST /api/auth/login` (usuario/contraseña con hash bcrypt,
@@ -374,6 +387,25 @@ Esta spec está **implementada y probada** (tareas 1–27) pero sigue en «Borra
 (ninguna HU avanza sin spec aprobada). Se pide al humano aprobar de forma explícita `requirements.md`
 y `design.md` (incluido RC-01) para regularizarla.
 
+**[RC-01 rev2] Decisión del humano (2026-11-23):** se aprueba la spec **en lo implementado**
+(tareas 1–27); el refuerzo RC-01 (incluida la rev2) queda pendiente de aprobación hasta que pase
+la revisión del analista.
+
+---
+
+## 11b. Riesgos aceptados [RC-01 rev2]
+
+| ID | Riesgo | Por qué se acepta | Mitigación / cuándo se aborda |
+|----|--------|-------------------|-------------------------------|
+| RA-01 (Q-A) | **Sin autenticación del operador.** Cualquier cliente puede crear, modificar, activar o desactivar zonas; por ejemplo, desactivar la zona en la que está un robot detenido para que su `recover` sea aceptado. La HU-02 del prototipo pide configuraciones «autorizadas». | Decisión del humano: deuda documentada para no bloquear la convergencia con el prototipo. | Cada cambio queda en `zone_change_log` (RF-05), aunque **sin actor**. Se abordará en un bloque posterior con la propuesta de §11 Q-A (añadiendo `actor` también a `audit_log` y `state_transition_log` de la spec 002). |
+| RA-02 (Q-G) | `packages/backend/data/` sigue versionada en git (decisión previa del humano). Una base versionada puede llevar un historial de migraciones distinto del de una base nueva. | Decisión del humano. | `migrate.ts` endurecido (spec 002, Q-G) falla si una migración pendiente tiene número menor que la última aplicada; la prueba RC-16 de esta spec cubre el caso de `013`. |
+
+### Observación para el equipo (M-12, fuera de las specs)
+`.kiro/steering/architecture.md` y `frontend.md` usan rutas y nombres que no coinciden con las
+specs (`/api/rooms` en lugar de `/api/zones`, `/api/telemetry` en lugar de
+`/api/robots/:robotId/move`). Esta spec **no** edita el steering; se deja anotado para que el
+equipo lo alinee.
+
 ---
 
 ## 12. Registro de cambios
@@ -381,3 +413,36 @@ y `design.md` (incluido RC-01) para regularizarla.
 | Cambio | Fecha | Estado | Resumen |
 |--------|-------|--------|---------|
 | RC-01 — Refuerzo de convergencia con el prototipo | 2026-11-22 | Propuesto, pendiente de aprobación | Rótulo de HU alineado con el backlog del prototipo sin renumerar; **RF-05** registro de cambios de zona (append-only, misma transacción, `GET /api/zones/changes`); **RF-06** catálogo de reglas `RULES` + `ruleForDecision` + tarjeta en la UI; RNF-06; CA-02.9–CA-02.13; preguntas Q-A (autenticación) y Q-C (aprobación). Contrato común con las specs 002 y 003 (D6 y catálogo de reglas). |
+| RC-01 rev2 — Hallazgos del analista sobre RC-01 | 2026-11-23 | Propuesto, pendiente de aprobación | Ver tabla siguiente. Decisiones del humano aplicadas: Q-A (deuda documentada, §11b), Q-C (aprobada en lo implementado), M-1 (r = m = 0 por defecto, pad 30 solo en pruebas), Q-B (`R-SIGNAL-01` cubre `POSITION_QUALITY_LOST`). |
+
+### Resolución de hallazgos — RC-01 rev2 [RC-01 rev2]
+
+| Hallazgo | Resolución en esta spec |
+|----------|-------------------------|
+| B-1 Ciclos entre specs | Tareas etiquetadas `[U1]`/`[U2]` y paso de U1 (`tasks.md`). `RULES` + `ruleForDecision` en U1 paso 1; ninguna tarea de la 001 depende de algo que otra spec entregue después. |
+| B-2 Doble migración de la UI | No aplica a esta spec (Q-F: una sola migración, spec 003). |
+| B-3 `robot_sessions` duplicada | No aplica a esta spec. |
+| B-4 Zona del incidente | No aplica a esta spec (columna `zone_name`, spec 002). |
+| B-5 Rechazos auditados que se pierden | No aplica: los rechazos de zonas (404/409/422) no se auditan (RF-05.3, CA-02.10). |
+| I-1 Dos vigilantes en integraciones intermedias | No aplica (plan de unidades U1/U2, spec 002/003). |
+| I-2 Orden de migraciones | `013_create_zone_change_log.sql` va en **U2**, después de 007–012 (U1). Tarea RC-16: prueba de que `migrate.ts` aplica 013 tras 007–012 y rechaza el orden inverso (dependencia del endurecimiento Q-G de la 002). |
+| I-3 Fila base de transiciones | No aplica a esta spec. |
+| I-4 Posiciones iniciales | No aplica a esta spec. |
+| I-5 `ruleForDecision` duplicada | Única definición en `domain/src/rules/catalog.ts` (RF-06.2, DD-014); la 002 la consume. |
+| I-6 `initRobot` / `DEFAULT` de calidad | No aplica a esta spec. |
+| I-7 Robot dentro de zona activa | No aplica a esta spec (Q-D, spec 002/003). |
+| I-8 Pruebas afectadas por archivo | RC-5/RC-16 nombran `migrate.test.ts`; RC-9 nombra `zoneService.test.ts` y `zones.api.test.ts`. |
+| I-9 Restos de la 003 en el repositorio | No aplica a esta spec. |
+| M-1 `ROBOT_RADIUS`/`SAFETY_MARGIN` | Resuelto: ejecución por defecto `r = m = 0`; `pad = 30` solo en B1–B9 y T-12 D/E (§7 y casilla de la compuerta del design). |
+| M-2 Estados de aprobación | Resuelto con Q-C: «Aprobado (2026-11-23) en lo implementado». |
+| M-3 Restos sin marcar en la 002 | No aplica a esta spec. |
+| M-4 `BUSY` | No aplica a esta spec. |
+| M-5 Código de payload de `move` | No aplica a esta spec. |
+| M-6 CA de la 003 | No aplica a esta spec. |
+| M-7 Indicador de solicitudes | No aplica a esta spec. |
+| M-8 «NNN se fija al integrar» | Resuelto: eliminado del design (§5.1b). |
+| M-9 Alta vía repositorio de la 002 | No aplica a esta spec. |
+| M-10 Fechas no ISO | No aplica: `zone_change_log` ya usa `strftime('%Y-%m-%dT%H:%M:%fZ','now')`. |
+| M-11 Nombre `Incident` | No aplica a esta spec. |
+| M-12 Steering desalineado | Anotado como observación para el equipo (§11b), sin editar el steering. |
+

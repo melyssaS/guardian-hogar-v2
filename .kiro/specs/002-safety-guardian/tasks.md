@@ -2,8 +2,8 @@
 
 **Fase MADA:** CONSTRUIR
 **HU cubiertas:** HU-04, HU-05
-**Estado:** Tareas 1–27 implementadas (773823a); refuerzo RC-01 pendiente de aprobación humana
-(requiere `requirements.md` y `design.md` aprobados, incluido RC-01)
+**Estado:** Tareas 1–27 implementadas (773823a) y aprobadas (2026-11-23); refuerzo RC-01 (rev2)
+pendiente de aprobación humana
 
 ## Overview
 
@@ -121,136 +121,168 @@ graph TD
 
 ---
 
-## Refuerzo RC-01 — tareas de convergencia
+## Refuerzo RC-01 — tareas de convergencia [RC-01 rev2]
 
-Delta sobre lo implementado en 773823a (ver `requirements.md` §13 y `design.md` [RC-01]). Las
-tareas 1–27 se conservan tal cual. Todas las tareas RC siguen TDD: la prueba en rojo se escribe y
-se **ve fallar** antes de implementar, y su salida se conserva como evidencia (art. XV).
+Delta sobre lo implementado en 773823a (ver `requirements.md` §13 y `design.md` [RC-01]/[RC-01 rev2]).
+Las tareas 1–27 se conservan tal cual.
 
-### Bloque A — Vigilante único, registro de transiciones e incidentes con regla (prioridad)
+> **Sustituye al plan RC-01 inicial** (bloques A–D de 5da075e, nunca ejecutado): tenía dependencias
+> cíclicas entre specs (B-1), una doble migración de la UI sin tarea en la 003 (B-2) e integraciones
+> intermedias con dos vigilantes (I-1). El plan inicial puede consultarse en el historial de git.
 
-- [ ] RC-1. Dominio (aditivo): `TransitionCause`, `RecoveryRejectionCause`, `RecoverResponse`, `RobotStatus`, `LastRequest`, `GuardedMoveRequest`, `Incident`, `IncidentDetail`; esquemas `guardedMoveRequestSchema`, `robotIdParamSchema`, `incidentIdParamSchema`, `incidentListQuerySchema`; `zoneName` en `GuardianDecision`. Sin tocar todavía los tipos de la spec 003 (el build sigue en verde)
-  - _Requisitos: R5.6, R5.7, R9, R11.2, R12.3_
-- [ ] RC-2. (Prueba roja primero) `canTransition` como lista blanca T1–T9 y `ruleForDecision` (6 códigos → `R-ZONA-01`/`R-SIGNAL-01`/`R-DATA-01`); después implementar ambas en `rules/`
-  - _Requisitos: §2.2 (lista blanca, design T1–T9), R5.5, R9_
-- [ ] RC-3. (Prueba roja primero) `evaluateRecovery` pura: orden `UNRELIABLE_DATA` → `ZONE_DATA_UNAVAILABLE` → `UNSAFE_POSITION`, zonas inactivas ignoradas, pad r+m; después extraerla de `guardianService` a `rules/guardian.ts`
+**Reglas del plan**
+- **Dos unidades de integración.** `[U1]` "vigilante único + incidentes + robots y sesiones" (prioridad
+  del humano) y `[U2]` "supervisión completa y zonas". Nada intermedio se integra en
+  `integration`/`develop`; dentro de la rama de trabajo cada tarea termina en verde: el código antiguo
+  (`/api/simulation`, `/api/robot`, `get`/`save`) sigue funcionando hasta su tarea de retirada, que va
+  dentro de U1 (R10.6).
+- **Pasos de U1** (orden obligatorio): 1 dominio aditivo → 2 migraciones → 3 backend probado con apps de
+  prueba **sin montar** en `app.ts` → 4 UI de la spec 003 → 5 montaje + retirada + arquitectura + E2E.
+  Ninguna tarea depende de otra de un paso posterior.
+- **TDD:** cada tarea marcada "(prueba roja primero)" escribe la prueba, la **ve fallar** y conserva la
+  salida como evidencia (art. XV) antes de implementar.
+- **Rechazos auditados (B-5):** toda tarea que añade un 409 auditable incluye una prueba que lee
+  `audit_log` después de la respuesta (Property 16).
+- **Dependencias de otras specs** citadas por nombre: `[001-RULES]` (constante `RULES` y
+  `ruleForDecision`, spec 001 paso U1-1), `[003-robots]` (`007_create_robots.sql`, spec 003 paso U1-2),
+  `[003-sessions]` (`012_create_robot_sessions.sql`, `MoveCommand`, `LastRequest`, `checkSequence`,
+  `sessionService.startSession`, spec 003 pasos U1-1/U1-2/U1-3), `[003-UI]` (UI contra
+  `/api/robots/:robotId/*`, spec 003 paso U1-4).
+
+### [U1] Paso 1 — Dominio (aditivo, build en verde)
+
+- [ ] RC-1. `[U1·1]` Dominio: `RobotId`, `TransitionCause` (con `MIGRATION_BASELINE`), `RecoveryRejectionCause`, `RecoverResponse`, `RobotStatus` (con `lastRequest: LastRequest | null` de `[003-sessions]`), `Incident`/`IncidentDetail` (con `zoneName` y `decisionCode` que admite `POSITION_QUALITY_LOST`), `ServiceResult`/`RejectionCode`; esquemas `robotIdParamSchema`, `incidentIdParamSchema`, `incidentListQuerySchema`; `zoneName` en `GuardianDecision`. Sin tocar los tipos de la spec 003 ni definir tipos de sesión.
+  - _Requisitos: R5.6, R5.7, R5.10, R9, R12.3_
+  - _Requiere: `[001-RULES]` (para `RuleId`), `[003-sessions]` (tipos)_
+  - _Pruebas afectadas: ninguna existente (aditivo); nuevas en `domain/tests/`._
+- [ ] RC-2. `[U1·1]` (prueba roja primero) `canTransition` como lista blanca T1–T9 (T10 queda fuera: la escribe la migración) y el helper de estrechamiento `denialRule(code)` sobre `ruleForDecision` de `[001-RULES]` (6 códigos de denegación + `POSITION_QUALITY_LOST` → `R-SIGNAL-01`); después implementarlos en `rules/`
+  - _Requisitos: §2.2 (design T1–T10), R5.5, R5.11, R9_
+  - _Pruebas afectadas: `backend/tests/unit/stateMachine.test.ts`, `prohibitedTransitions.test.ts` (pasan a lista blanca)._
+- [ ] RC-3. `[U1·1]` (prueba roja primero) `evaluateRecovery` pura: orden `UNRELIABLE_DATA` → `ZONE_DATA_UNAVAILABLE` → `UNSAFE_POSITION`, zonas inactivas ignoradas, pad r+m; después extraerla de `guardianService` a `rules/guardian.ts`
   - _Requisitos: R4.4_
-- [ ] RC-4. (Prueba roja primero) Migración `010_create_state_transition_log.sql` (CHECKs y triggers append-only) y `transitionLogRepository`; después implementarlas
-  - _Requisitos: R9.1, R5.9_
-- [ ] RC-5. (Prueba roja primero) Property 11 en el servicio: filas exactas de `state_transition_log` para `move` autorizado (T1+T2, con `MOVING` persistido dentro de la transacción), denegado (T3/T4 con `incidentId`), `recover` (T6+T7 con snapshot) y arranque (T8 sembrando `MOVING` en la base); sin filas en rechazos
-  - _Requisitos: R9.1–R9.7, R6.5, R4.6_
-- [ ] RC-6. Implementar el helper `transition` en `guardianService` y en `db/bootstrap.ts`, persistiendo `MOVING` y `RECOVERING`; hacer verde RC-5 y actualizar las pruebas existentes que suponían `MOVING` no persistido
-  - _Requisitos: R9, R6.5_
-- [ ] RC-7. (Prueba roja primero) Contrato de `recover`: `transitioned`, `409 RECOVERY_NOT_ALLOWED` con `cause`, `RECOVER_NOOP` en `IDLE`; después implementarlo, ampliando `AppError` y `errorHandler` con `cause` y actualizando las pruebas de `recover` existentes (hoy esperan `{ recovered, reason }`)
-  - _Requisitos: R4.4, R4.5, R7.2_
-- [ ] RC-8. (Prueba roja primero) Migración `011_audit_log_generalize.sql`: conserva todas las filas, `robot_id`, `x`/`y` nullable, `detail`, CHECK de `event_code`; después implementarla y ampliar `auditLogRepository`
-  - _Requisitos: R5.8, R5.9, R8.7_
-- [ ] RC-9. (Prueba roja primero) Lecturas de posición: `RELIABLE` coincidente → solo calidad; no coincidente → `409 POSITION_CONFLICT` auditado; fuera del plano → 422; pérdida (`UNRELIABLE`/`MISSING`) aceptada aunque la posición esté fuera del plano, `IDLE → DEGRADED` (T5) y sin incidente; Property 13. Después implementar `setPosition` y ajustar la prueba existente 27 para usar la posición actual
-  - _Requisitos: R3.6, R8.5–R8.7_
-- [ ] RC-10. (Prueba roja primero) Migración `009_incidents_robot_rule.sql`; incidente nuevo con `robot_id`, `rule` y `zoneName`; lectura de filas antiguas con `robotId: null` y `rule` derivada; después implementarlo en `incidentRepository` y en el servicio
-  - _Requisitos: R5.5_
-- [ ] RC-11. (Prueba roja primero) `GET /api/incidents` del más reciente al más antiguo (hoy `ORDER BY id` ascendente), con `?robotId=` y `404 ROBOT_NOT_FOUND`; `GET /api/incidents/:id` con `zonesSnapshot` y `404 INCIDENT_NOT_FOUND`; después implementar controller y rutas
-  - _Requisitos: R5.6, R5.7_
-- [ ] RC-12. Trasladar `assertDestinationWithinFloor` de `services/movementService.ts` a `services/floorBounds.ts` (lo usa `guardianService`), sin cambiar su comportamiento
+  - _Pruebas afectadas: `guardianService.test.ts`, `guardianService.requirements.test.ts` (la validación sale del servicio)._
+
+### [U1] Paso 2 — Migraciones (orden de entrega = orden de aplicación)
+
+- [ ] RC-4. `[U1·2]` (prueba roja primero) Endurecer `db/migrate.ts`: si una migración pendiente tiene número menor que la última aplicada, falla con un error claro y no aplica nada; después implementarlo
+  - _Requisitos: R10.5 (esquema coherente), DD-227_
+  - _Pruebas afectadas: `backend/tests/unit/migrate.test.ts`._
+- [ ] RC-5. `[U1·2]` (prueba roja primero) Migración `008_robot_state_per_robot.sql`: base existente (fila `id = 1` → A1 conservando estado, posición y calidad; V2 en (488, 290)) y base nueva (A1 en (160, 123), V2 en (488, 290)); `position_quality` sin `DEFAULT`; CHECK de 5 estados; fechas ISO. Después implementarla. Los métodos `get`/`save` actuales de `robotRepository` siguen funcionando sobre A1 hasta RC-24
+  - _Requisitos: R12.1, R12.5, R10.5_
+  - _Requiere: `[003-robots]` (007 aplicada antes)_
+  - _Pruebas afectadas: `simulationRepositories.test.ts` (hoy exige una sola fila y rechaza `id=2`), `migrate.test.ts` (lista de tablas y `WHERE id = 1`), `bootstrap.test.ts`, `liveness.test.ts`._
+- [ ] RC-6. `[U1·2]` (prueba roja primero) Migración `009_incidents_robot_rule_zone.sql`: `robot_id`, `rule`, `zone_name` (NULL en filas antiguas, sin reescribirlas); después implementarla
+  - _Requisitos: R5.5, R5.9_
+  - _Pruebas afectadas: `incidentRepository.test.ts`._
+- [ ] RC-7. `[U1·2]` (prueba roja primero) Migración `010_create_state_transition_log.sql`: tabla, CHECKs (incluido `MIGRATION_BASELINE`), triggers append-only y una fila base por robot existente; `transitionLogRepository`; después implementarlas
+  - _Requisitos: R9.1, R9.7, R9.8, R5.9_
+- [ ] RC-8. `[U1·2]` (prueba roja primero) Migración `011_audit_log_generalize.sql`: copia todas las filas, `robot_id`, `x`/`y` nullable, `detail`, CHECK de `event_code` (incluidos `SESSION_STARTED` y `ROBOT_START_IN_RESTRICTED_ZONE`), triggers recreados; ampliar `auditLogRepository` (fechas ISO al leer); después implementarlas
+  - _Requisitos: R5.8–R5.10, R8.7_
+  - _Pruebas afectadas: `robotPositionRecovery.api.test.ts` (lee el audit)._
+  - _Nota: `012_create_robot_sessions.sql` la entrega `[003-sessions]` en este mismo paso, después de 011._
+
+### [U1] Paso 3 — Backend por robot (probado con apps de prueba, sin montar en `app.ts`)
+
+- [ ] RC-9. `[U1·3]` Trasladar `assertDestinationWithinFloor` de `services/movementService.ts` a `services/floorBounds.ts` sin cambiar su comportamiento (lo usará `guardianService`)
   - _Requisitos: R1.9, R10_
-
-### Bloque B — Retirada del vigilante provisional (entrega conjunta con la UI de la spec 003)
-
-- [ ] RC-13. (Prueba roja primero: debe fallar hoy) Prueba de arquitectura de la Property 12 (imports de `src`, incluidos `import type`, y literal `robot_state` en SQL solo en `repositories/robotRepository.ts`) y prueba de integración `/api/simulation/*` → 404
-  - _Requisitos: R10.2, R10.3_
-- [ ] RC-14. Retirar `routes/simulationRoutes.ts`, `controllers/simulationController.ts`, `services/movementService.ts`, `rules/watchmanRule.ts`, sus pruebas y los tipos `Decision`/`MoveResult` de la spec 003; desmontar `/api/simulation` en `app.ts`. **Se integra en la misma entrega que la migración de la UI de la spec 003 a `/api/robot*`**; RC-13 pasa a verde
-  - _Requisitos: R10.1–R10.4_
-
-### Bloque C — Multi-robot y sesiones
-
-- [ ] RC-15. (Prueba roja primero) Migración `008_robot_state_per_robot.sql`: la fila `id = 1` pasa a "Aspiradora A1" conservando estado, posición y calidad; "Vigilante V2" en (488, 290) `IDLE`/`RELIABLE`; `DEFAULT 'RELIABLE'`. Requiere la migración `007_create_robots.sql` de la spec 003
-  - _Requisitos: R12.1, R12.5_
-- [ ] RC-16. Implementar la migración 008, `robotRepository` por robot y `guardianService.initRobot` (T9 `ROBOT_REGISTERED`), invocado por el alta del catálogo de la spec 003 en la misma transacción
-  - _Requisitos: R12.2, R9.5_
-- [ ] RC-17. (Prueba roja primero) API por robot: `/api/robots/:robotId/{state,move,recover,position}`, `404 ROBOT_NOT_FOUND`, Property 15 (aislamiento) y `/api/robot/*` → 404
-  - _Requisitos: R1.8, R12.3, R12.4, R10.2_
-- [ ] RC-18. Implementar `routes/guardianRoutes.ts` (`mergeParams`) y retirar `routes/robotRoutes.ts` (`/api/robot` singular), actualizando las pruebas existentes de `/api/robot`. **Se integra junto con la UI de la spec 003 que usa las rutas por robot**
-  - _Requisitos: R10.2, R12_
-- [ ] RC-19. (Prueba roja primero) Arranque seguro por robot: dos robots, uno con `MOVING` sembrado → solo ese pasa a `SAFE_STOP` con T8; después implementarlo en `db/bootstrap.ts` (y en `db/init.ts`)
+  - _Pruebas afectadas: `movementService.test.ts` (import)._
+- [ ] RC-10. `[U1·3]` (prueba roja primero) Helper `transition` + Property 11 por robot: filas exactas de `state_transition_log` para `move` autorizado (T1+T2 con `MOVING` persistido), denegado (T3/T4 con `incidentId`), `recover` (T6+T7 con snapshot), arranque (T8 sembrando `MOVING`) y la fila base; sin filas en rechazos. Después implementarlo en `guardianService` y `db/bootstrap.ts` (todos los robots; también en `db/init.ts`)
+  - _Requisitos: R9.1–R9.8, R6.5, R4.6_
+  - _Pruebas afectadas: `guardianService.test.ts`, `guardianService.requirements.test.ts`, `liveness.test.ts` (suponían `MOVING` no persistido), `bootstrap.test.ts`._
+- [ ] RC-11. `[U1·3]` (prueba roja primero) `ServiceResult` y Property 16: para `SAFE_STOP_ACTIVE`, `BUSY`, `RECOVERY_NOT_ALLOWED` y `POSITION_CONFLICT`, la fila de `audit_log` existe tras el 409 y el estado no cambia; `AppError`/`errorHandler` con `cause` opcional. Después implementarlo
+  - _Requisitos: R5.10, R4.4, R8.5, R7.2_
+  - _Pruebas afectadas: `robotController.test.ts`._
+- [ ] RC-12. `[U1·3]` (prueba roja primero) Contrato de `recover`: `transitioned`, `409 RECOVERY_NOT_ALLOWED` + `cause`, `RECOVER_NOOP` en `IDLE`; después implementarlo
+  - _Requisitos: R4.4, R4.5_
+  - _Pruebas afectadas: `robotPositionRecovery.api.test.ts`, `robot.api.test.ts` (hoy esperan `{ recovered, reason }` y 409 en `IDLE`)._
+- [ ] RC-13. `[U1·3]` (prueba roja primero) Lecturas de posición: `RELIABLE` coincidente → solo calidad; no coincidente → `409 POSITION_CONFLICT` auditado; `RELIABLE` fuera del plano → 422; pérdida aceptada aunque la posición venga fuera del plano; en `IDLE` T5 + incidente `R-SIGNAL-01` (`POSITION_QUALITY_LOST`, origen = destino = posición actual); en parada solo la calidad, sin incidente; Property 13. Después implementar `setPosition`
+  - _Requisitos: R3.6, R5.11, R8.5–R8.7_
+  - _Pruebas afectadas: `robotPositionRecovery.api.test.ts` (prueba 27: relocalizaba), `guardianService.requirements.test.ts`._
+- [ ] RC-14. `[U1·3]` (prueba roja primero) Incidentes: nuevos con `robot_id`, `rule`, `zone_name`; antiguos con `robotId: null` y `rule` derivada; `GET /api/incidents` del más reciente al más antiguo con `?robotId=` y `404 ROBOT_NOT_FOUND`; `GET /api/incidents/:id` con `zonesSnapshot` y `404 INCIDENT_NOT_FOUND`; fechas ISO; tipo de fila `IncidentRow`. Después implementar repositorio, controller y rutas (app de prueba)
+  - _Requisitos: R5.5–R5.7_
+  - _Pruebas afectadas: `incidentRepository.test.ts`, `incidentController.test.ts` (orden ascendente actual)._
+- [ ] RC-15. `[U1·3]` (prueba roja primero) `initRobot`: `INSERT` simple que falla si la fila existe; T9; alta en zona activa → `ROBOT_START_IN_RESTRICTED_ZONE` auditado sin crear nada (Property 16); el catálogo `[003-robots]` lo invoca en su transacción. Después implementarlo
+  - _Requisitos: R12.2, R9.5, R5.10_
+- [ ] RC-16. `[U1·3]` (prueba roja primero) API por robot en `routes/guardianRoutes.ts` (`mergeParams`): `/api/robots/:robotId/{state,move,recover,position}`, `404 ROBOT_NOT_FOUND`, Property 15 (aislamiento), `lastRequest` en `state`; `move` con `MoveCommand` (`422 INVALID_MOVE_REQUEST`) y orden de validación R11.5 usando `checkSequence`/`sessionRepository` de `[003-sessions]`; `INVALID_SESSION`/`DUPLICATE_EVENT` auditados (Property 14, 16). Después implementarla, probándola con una app de prueba
+  - _Requisitos: R1.8, R1.9, R11.2–R11.6, R12.3, R12.4, R5.8_
+- [ ] RC-17. `[U1·3]` (prueba roja primero) Arranque seguro por robot: dos robots, uno con `MOVING` sembrado → solo ese pasa a `SAFE_STOP` con T8; después implementarlo
   - _Requisitos: R6.5_
-- [ ] RC-20. (Prueba roja primero) Sesión y secuencia: `POST /sessions` → 201 y auditoría `SESSION_STARTED`; orden de validación de R11.5; `409 INVALID_SESSION` y `409 DUPLICATE_EVENT` sin evaluar, sin cambio de estado y sin incidente; consumo de la secuencia; `lastRequest` en `GET /state`; Property 14
-  - _Requisitos: R11.1–R11.6, R5.8_
-- [ ] RC-21. Implementar la validación de sesión y secuencia en `move` usando `robot_sessions`, `sessionRepository` y `checkSequence`/`acceptRequest` de la spec 003 (migración `012_create_robot_sessions.sql` y `sessionService.startSession` son de la 003, RC-15/RC-17)
-  - _Requisitos: R11_
+  - _Pruebas afectadas: `bootstrap.test.ts`._
 
-### Bloque D — Integración y calidad
+### [U1] Paso 4 — UI de la spec 003
 
-- [ ] RC-22. Integración Supertest de extremo a extremo: alta de robot (spec 003) → sesión → move denegado (incidente con `rule`) → move con la misma secuencia → `DUPLICATE_EVENT` → move rechazado `SAFE_STOP_ACTIVE` → recover rechazado `UNSAFE_POSITION` → desactivar la zona (spec 001) → recover OK; comprobando las filas exactas de `state_transition_log`, `audit_log` e `incidents`
+- (Sin tareas de esta spec.) `[003-UI]` migra la UI a `/api/robots/:robotId/*` en una sola vez (Q-F).
+
+### [U1] Paso 5 — Montaje, retirada, arquitectura y E2E (una sola entrega)
+
+- [ ] RC-18. `[U1·5]` (prueba roja primero: debe fallar hoy) Prueba de arquitectura de la Property 12: imports de `src` (incluidos `import type`), literal `robot_state` en SQL solo en `repositories/robotRepository.ts`; y pruebas de integración `/api/simulation/*` y `/api/robot/*` → 404
+  - _Requisitos: R10.2, R10.3, R10.5_
+- [ ] RC-19. `[U1·5]` Montar en `app.ts` el catálogo `[003-robots]` en `/api/robots` y `guardianRoutes` debajo; montar las rutas de incidentes nuevas
+  - _Requisitos: R10.1, R12_
+  - _Pruebas afectadas: `robot.wiring.test.ts`._
+- [ ] RC-20. `[U1·5]` Retirar `routes/simulationRoutes.ts`, `controllers/simulationController.ts`, `services/movementService.ts`, `rules/watchmanRule.ts`, `routes/robotRoutes.ts` (`/api/robot` singular), los métodos `get`/`save` y el tipo `RobotSnapshot` de `robotRepository`, los tipos `Decision`/`MoveResult` y el alias `moveSchema = moveRequestSchema` de `domain/src/schemas/robot.schema.ts` (I-9). RC-18 pasa a verde
+  - _Requisitos: R10.1–R10.6_
+  - _Pruebas que se retiran: `watchmanRule.test.ts`, `movementService.test.ts`, `simulation.api.test.ts`. Pruebas afectadas: `robot.api.test.ts`, `robotController.test.ts`, `domain/tests/robotSchema.test.ts`, `domain/tests/simulationSchema.test.ts`._
+- [ ] RC-21. `[U1·5]` Integración Supertest de extremo a extremo: alta de robot → alta en zona activa (409 auditado) → sesión → move denegado (incidente con `rule` y `zoneName`) → misma secuencia (`DUPLICATE_EVENT`) → move rechazado `SAFE_STOP_ACTIVE` → recover `UNSAFE_POSITION` → desactivar la zona (spec 001) → recover OK → señal de pérdida (incidente `R-SIGNAL-01`, `DEGRADED`) → lectura `RELIABLE` coincidente → recover OK; comprobando las filas exactas de `state_transition_log`, `audit_log` e `incidents`
   - _Requisitos: R4, R5, R9, R11, R12_
-- [ ] RC-23. Calidad: ESLint, typecheck, Prettier y pruebas en verde; cero `any`; T-12 sigue verde
+
+### [U2] Supervisión completa y zonas
+
+- [ ] RC-22. `[U2]` Calidad final: ESLint, typecheck, Prettier y pruebas en verde; cero `any`; T-12 sigue verde; sin dependencias de U2 en esta spec más allá de comprobar que el registro de cambios de zona de la spec 001 (`013`) no altera el vigilante
   - _Requisitos: R7_
 
 ### Dependencias del refuerzo
 
 ```mermaid
 graph TD
-  A1[RC-1 dominio] --> A2[RC-2/RC-3 reglas]
-  A2 --> A4[RC-4..RC-6 transiciones]
-  A4 --> A7[RC-7 recover]
-  A4 --> A8[RC-8/RC-9 auditoría y lecturas]
-  A1 --> A10[RC-10/RC-11 incidentes]
-  R001[spec 001: RULES] --> A10
-  A1 --> A12[RC-12 floorBounds]
-  A12 --> B[RC-13/RC-14 retirada + UI 003]
-  A7 --> B
-  A10 --> B
-  S003[spec 003: 007_create_robots] --> C15[RC-15/RC-16 estado por robot]
-  B --> C15
-  C15 --> C17[RC-17/RC-18 rutas por robot + UI 003]
-  C15 --> C19[RC-19 arranque por robot]
-  C17 --> C20[RC-20/RC-21 sesiones]
-  C20 --> D[RC-22/RC-23]
-  C19 --> D
+  R001[001: RULES · U1-1] --> RC1[RC-1 dominio]
+  S003a[003: tipos de sesión · U1-1] --> RC1
+  RC1 --> RC2[RC-2 / RC-3 reglas]
+  RC2 --> RC4[RC-4 migrate.ts]
+  S003b[003: 007_create_robots · U1-2] --> RC5[RC-5 008]
+  RC4 --> RC5
+  RC5 --> RC6[RC-6 009] --> RC7[RC-7 010] --> RC8[RC-8 011]
+  RC8 --> S003c[003: 012_create_robot_sessions · U1-2]
+  S003c --> RC9[RC-9..RC-17 backend · U1-3]
+  RC9 --> S003d[003: UI · U1-4]
+  S003d --> RC18[RC-18..RC-21 montaje + retirada · U1-5]
+  RC18 --> RC22[RC-22 · U2]
 ```
 
 ```json
 {
-  "rc01_waves": [
-    { "id": "A", "tasks": ["RC-1", "RC-2", "RC-3", "RC-4", "RC-5", "RC-6", "RC-7", "RC-8", "RC-9", "RC-10", "RC-11", "RC-12"] },
-    { "id": "B", "tasks": ["RC-13", "RC-14"], "together_with": "003-movement-simulation (UI → /api/robot)" },
-    { "id": "C", "tasks": ["RC-15", "RC-16", "RC-17", "RC-18", "RC-19", "RC-20", "RC-21"], "requires": ["003: 007_create_robots.sql"], "together_with": "003-movement-simulation (UI → /api/robots/:robotId)" },
-    { "id": "D", "tasks": ["RC-22", "RC-23"] }
+  "rc01_rev2_units": [
+    { "id": "U1", "steps": {
+        "1": ["RC-1", "RC-2", "RC-3"],
+        "2": ["RC-4", "RC-5", "RC-6", "RC-7", "RC-8"],
+        "3": ["RC-9", "RC-10", "RC-11", "RC-12", "RC-13", "RC-14", "RC-15", "RC-16", "RC-17"],
+        "4": [],
+        "5": ["RC-18", "RC-19", "RC-20", "RC-21"] },
+      "together_with": ["001 (RULES, paso 1)", "003 (robots, sesiones y UI, pasos 1-5)"],
+      "integration": "una sola entrega" },
+    { "id": "U2", "tasks": ["RC-22"], "together_with": ["001 (zone_change_log 013, tarjeta de reglas)", "003 (supervisión completa)"] }
   ]
 }
 ```
 
 ### Notas del refuerzo
-- **Orden pedido:** primero el bloque A (vigilante único y registro de transiciones, incidentes con
-  regla), luego la retirada (B) y por último multi-robot y sesiones (C).
-- **Vigilante único en cada integración:** la retirada de `/api/simulation/*` (RC-14) se integra en
-  la **misma entrega** que la migración de la UI de la spec 003; nunca se integra una versión con
-  dos vigilantes ni con una UI que llame a rutas retiradas. Lo mismo para la retirada de
-  `/api/robot/*` singular (RC-18) y el paso de la UI a `/api/robots/:robotId/*`.
-- **Doble migración de la UI:** con este orden, la UI de la spec 003 pasa primero a `/api/robot`
-  (bloque B, un robot) y después a `/api/robots/:robotId` (bloque C). Si se prefiere una sola
-  migración de la UI, los bloques B y C se integran juntos. **Decisión de la unificación RC-01:**
-  se acepta la doble migración (es un cambio de ruta en `robotApi`) para entregar antes el
-  refuerzo 1 y la vista de incidentes, que tienen prioridad.
-- **Numeración de migraciones:** 008–012 suponen que la spec 003 añade `007_create_robots.sql`; se
-  ajusta al coordinar con las migraciones de las specs 001 y 003.
-- **Pruebas existentes afectadas:** las de `recover` (forma de respuesta), `setPosition`
-  (relocalización), el orden de `GET /api/incidents`, las rutas `/api/robot/*` y las que suponen
-  `MOVING` no persistido se actualizan en la tarea que cambia ese comportamiento, no se borran.
-- `tasks.meta.json` registra ejecuciones reales de las tareas 1–27; no se añaden entradas para
-  tareas RC no ejecutadas (art. XV).
+- **Una sola migración de la UI (Q-F):** no existe etapa `/api/robot`; la UI de la 003 pasa de
+  `/api/simulation/*` a `/api/robots/:robotId/*` en el paso U1-4.
+- **Vigilante único en cada integración (R10.6):** U1 se integra entera o no se integra.
+- `tasks.meta.json` registra ejecuciones reales de las tareas 1–27; no se añaden entradas para tareas
+  RC no ejecutadas (art. XV).
 
-### Trazabilidad RC-01 → tarea
+### Trazabilidad RC-01 rev2 → tarea
 | Requisito / Property | Tareas |
 |----------------------|--------|
-| R1.8, R1.9 | RC-12, RC-17 |
-| R3.6 | RC-9 |
-| R4.4–R4.6 | RC-3, RC-5, RC-7 |
-| R5.5–R5.9 | RC-4, RC-8, RC-10, RC-11, RC-20 |
-| R6.5 | RC-5, RC-6, RC-19 |
-| R8.5–R8.7 | RC-9 |
-| R9 / Property 11 | RC-2, RC-4, RC-5, RC-6, RC-22 |
-| R10 / Property 12 | RC-12, RC-13, RC-14, RC-18 |
-| R11 / Property 14 | RC-20, RC-21, RC-22 |
-| R12 / Property 15 | RC-15, RC-16, RC-17, RC-18 |
-| Property 13 | RC-9 |
-
+| R1.8, R1.9 | RC-9, RC-16 |
+| R3.6, R5.11 | RC-2, RC-13, RC-21 |
+| R4.4–R4.6 | RC-3, RC-10, RC-11, RC-12 |
+| R5.5–R5.10 | RC-6, RC-8, RC-11, RC-14, RC-16 |
+| R6.5 | RC-10, RC-17 |
+| R8.5–R8.7 / Property 13 | RC-13 |
+| R9 (incl. R9.8) / Property 11 | RC-2, RC-7, RC-10, RC-21 |
+| R10 (incl. R10.5, R10.6) / Property 12 | RC-4, RC-5, RC-18, RC-19, RC-20 |
+| R11 / Property 14 | RC-16, RC-21 |
+| R12 / Property 15 | RC-5, RC-15, RC-16, RC-19 |
+| Property 16 (rechazos auditados) | RC-11, RC-13, RC-15, RC-16, RC-21 |

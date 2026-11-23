@@ -3,7 +3,8 @@
 **Fase MADA:** DISEÑAR
 **HU cubiertas:** HU-02 del backlog del prototipo; el plano («HU-01» en esta spec) es soporte de
 HU-02/HU-03 **[RC-01]** (ver nota de numeración en `requirements.md`).
-**Estado:** Borrador — implementado; refuerzo RC-01 pendiente de aprobación humana
+**Estado:** Aprobado (2026-11-23) en lo implementado; refuerzo RC-01 (incluida la rev2) pendiente de aprobación humana **[RC-01 rev2]**
+> Estado anterior: «Borrador — implementado; refuerzo RC-01 pendiente de aprobación humana».
 
 > Define la **arquitectura y los contratos técnicos**. Depende de `requirements.md` aprobado.
 
@@ -246,7 +247,7 @@ export const RULES: readonly Rule[] = [
     stories: ['HU-02', 'HU-04'] },
   { id: 'R-SIGNAL-01', title: 'Posición no confiable o ausente',
     description: 'Si la posición del robot no es confiable o falta, no se evalúa la geometría: el movimiento se deniega y el robot queda en operación degradada.',
-    decisionCodes: ['INSUFFICIENT_DATA', 'MISSING_POSITION'],
+    decisionCodes: ['INSUFFICIENT_DATA', 'MISSING_POSITION'],  // + POSITION_QUALITY_LOST vía ruleForDecision [RC-01 rev2]
     stories: ['HU-04', 'HU-05'] },
   { id: 'R-DATA-01', title: 'Información de zonas no disponible',
     description: 'Si no se pueden leer las zonas, el vigilante no puede verificar el movimiento y aplica fallo seguro: parada preventiva.',
@@ -255,7 +256,9 @@ export const RULES: readonly Rule[] = [
 ] as const;
 
 /** Pura. Devuelve la regla que cubre un código de denegación, o null (RF-06.2). */
-export function ruleForDecision(code: DecisionCode): RuleId | null;
+// [RC-01 rev2] Única definición del sistema (I-5). Acepta también el código del incidente de
+// pérdida de señal (Q-B), que no es un DecisionCode del vigilante.
+export function ruleForDecision(code: DecisionCode | 'POSITION_QUALITY_LOST'): RuleId | null;
 ```
 > El catálogo vive en el dominio porque es **política** compartida: la 001 lo define y lo muestra;
 > la 002 lo usa para rellenar `incidents.rule` (contrato RC-01, D4). Una prueba verifica que cada
@@ -263,6 +266,9 @@ export function ruleForDecision(code: DecisionCode): RuleId | null;
 > asignarle regla rompe la prueba.
 > Dependencia de tipos: `DecisionCode` está definido en `models/guardian.ts` (spec 002, ya
 > implementado en `integration`); ambos viven en el mismo paquete de dominio.
+> **[RC-01 rev2] (I-5)** Esta es la **única** implementación de `ruleForDecision`: la spec 002 la
+> importa para `incidents.rule` y no define otra en `backend/src/rules/`. Se entrega en la unidad
+> **U1, paso 1** (dominio aditivo), antes que cualquier migración o servicio que la use.
 
 ---
 
@@ -394,12 +400,15 @@ BEFORE DELETE ON zone_change_log BEGIN SELECT RAISE(ABORT, 'zone_change_log is a
 ```
 > Sin fila retroactiva para las zonas sembradas o creadas antes de esta migración (art. XV: no se
 > fabrican registros). El historial empieza cuando se aplica la migración.
-> El número `NNN` se fija al integrar (siguiente libre tras las migraciones existentes, 001–006 en
-> `integration`); las specs 002 y 003 añaden migraciones en el mismo refuerzo, así que el orden se
-> coordina en el plan de convergencia.
+> **[RC-01 rev2] (M-8, I-2)** Número fijado: `013`. Se entrega en la unidad **U2**, después de las
+> migraciones 007–012 de la unidad U1 (specs 002 y 003). El orden de los números es el orden real
+> de entrega, y `migrate.ts` (endurecido en la spec 002, Q-G) rechaza aplicar una migración con
+> número menor que la última aplicada.
 
 ### 5.2 Migraciones versionadas
 - Archivos `NNN_descripcion.sql` en `packages/backend/migrations/`, orden lexicográfico.
+  **[RC-01 rev2] (Q-G)** El número es el orden real de entrega; `migrate.ts` falla si una migración
+  pendiente tiene número menor que la última aplicada (endurecimiento de la spec 002).
 - Tabla de control `schema_migrations(version TEXT PRIMARY KEY, applied_at TEXT)`.
 - `db/migrate.ts` aplica en transacción las migraciones aún no registradas.
 
@@ -558,12 +567,17 @@ para los no denegatorios devuelve `null`.
 ---
 
 ## 10. Compuerta Fase 2 (DISEÑAR)
-- [ ] El humano aprueba explícitamente este `design.md`.
+- [x] El humano aprueba explícitamente este `design.md`. **[RC-01 rev2]** Aprobado el 2026-11-23
+  en lo implementado (Q-C).
 - [x] Se confirma la decisión DD-005 (better-sqlite3 sin ORM, aprobado por el equipo).
-- [x] Se fijan los valores de `ROBOT_RADIUS = 20` y `SAFETY_MARGIN = 10` (pad `30`).
+- [x] ~~Se fijan los valores de `ROBOT_RADIUS = 20` y `SAFETY_MARGIN = 10` (pad `30`).~~
+  **[RC-01 rev2] (M-1) Sustituido:** la ejecución por defecto usa `ROBOT_RADIUS = 0` y
+  `SAFETY_MARGIN = 0` (configurables por entorno, DD-008); `r = 20`, `m = 10` (pad `30`) son
+  valores **de prueba**, fijados solo en los escenarios B1–B9 y en los grupos D/E de la T-12.
+  Confirmado por el humano el 2026-11-23.
 - [ ] **[RC-01]** El humano aprueba DD-010–DD-015 (registro de cambios de zona, catálogo de reglas, rótulo de HU).
 
-> **[RC-01] Nota de coherencia detectada:** la casilla anterior fija `r = 20`, `m = 10` (pad 30),
+> **[RC-01] Nota de coherencia detectada** (resuelta en rev2, ver casilla anterior)**:** la casilla anterior fija `r = 20`, `m = 10` (pad 30),
 > pero DD-008, la sección 3.2 y el código usan por defecto `r = m = 0` configurables por entorno;
 > el pad 30 solo se fija explícitamente en los escenarios B1–B9. Conviene que el humano confirme
 > que la casilla se refiere a los valores de **prueba** y no a los de ejecución.

@@ -3,7 +3,8 @@
 **Spec:** `002-safety-guardian`
 **Fase MADA:** DISEÑAR
 **HU cubiertas:** HU-04, HU-05
-**Estado:** Borrador — implementado (773823a); refuerzo RC-01 pendiente de aprobación humana
+**Estado:** Aprobado (2026-11-23) en lo implementado (773823a); refuerzo RC-01 (rev2)
+pendiente de aprobación humana
 
 ## Overview
 
@@ -31,6 +32,12 @@ escenarios) ejercita la decisión con dobles de repositorio, sin frontend ni BD 
 - **Incidentes consultables:** `robot_id` y `rule` en `incidents`; `GET /api/incidents/:id`.
 - **Endurecimiento:** lecturas sin relocalización (`POSITION_CONFLICT`), señal de pérdida →
   `DEGRADED`, `recover` con `transitioned` y `cause`.
+
+**[RC-01 rev2]** Ajustes tras la revisión del analista: rechazos auditados como resultados
+tipados (no excepciones), incidente `R-SIGNAL-01` por pérdida de señal, `zone_name` en
+`incidents`, fila base `MIGRATION_BASELINE`, `position_quality` sin `DEFAULT`, `initRobot` con
+`INSERT` simple y validación de zona activa, tipos de sesión de la spec 003 y `ruleForDecision`
+de la spec 001. Plan de entrega en dos unidades (U1/U2) en `tasks.md`.
 
 ## Architecture
 
@@ -108,11 +115,13 @@ export type TransitionCause =
   | 'ORIGIN_IN_RESTRICTED_ZONE' | 'RESTRICTED_ZONE_VIOLATION' | 'TRAJECTORY_CROSSES_ZONE'
   | 'INSUFFICIENT_DATA' | 'MISSING_POSITION' | 'ZONE_DATA_UNAVAILABLE'
   | 'RECOVER_REQUESTED' | 'RECOVER_COMPLETED'
-  | 'POSITION_QUALITY_LOST' | 'BOOTSTRAP_MOVING_PERSISTED' | 'ROBOT_REGISTERED';
+  | 'POSITION_QUALITY_LOST' | 'BOOTSTRAP_MOVING_PERSISTED' | 'ROBOT_REGISTERED'
+  | 'MIGRATION_BASELINE';   // [RC-01 rev2] fila base de la migración 010
 
 export type RecoveryRejectionCause = 'UNRELIABLE_DATA' | 'ZONE_DATA_UNAVAILABLE' | 'UNSAFE_POSITION';
 
 export interface LastRequest { sessionId: string; sequence: number; destination: Point; acceptedAt: string; }
+// [RC-01 rev2] `LastRequest` lo define la spec 003; aquí solo se referencia.
 
 /** GET /api/robots/:robotId/state */
 export interface RobotStatus {
@@ -125,6 +134,8 @@ export interface RecoverResponse extends Omit<RobotStatus, 'lastRequest'> { tran
 
 /** Cuerpo de POST /api/robots/:robotId/move */
 export interface GuardedMoveRequest { destination: Point; sessionId: string; sequence: number; }
+// [RC-01 rev2] Sustituido: se usa `MoveCommand` (+ `moveCommandSchema`) y `LastRequest` de la
+// spec 003. Esta spec no define tipos ni esquemas de sesión.
 
 /** GET /api/incidents (resumen) y GET /api/incidents/:id (detalle) */
 export interface Incident {
@@ -135,9 +146,20 @@ export interface Incident {
   createdAt: string;                  // ISO-8601
 }
 export interface IncidentDetail extends Incident { zonesSnapshot: Zone[]; }
+
+/** [RC-01 rev2] Resultado tipado de las operaciones del servicio (B-5). */
+export type ServiceResult<T> =
+  | { kind: 'ok'; value: T }
+  | { kind: 'rejected'; code: RejectionCode; cause?: RecoveryRejectionCause; message: string };
+export type RejectionCode =
+  | 'INVALID_SESSION' | 'DUPLICATE_EVENT' | 'SAFE_STOP_ACTIVE' | 'BUSY'
+  | 'RECOVERY_NOT_ALLOWED' | 'POSITION_CONFLICT' | 'ROBOT_START_IN_RESTRICTED_ZONE';
 ```
+`Incident.decisionCode` admite además `POSITION_QUALITY_LOST` (incidente de pérdida de señal,
+R5.11) **[RC-01 rev2]**.
 Esquemas Zod: `guardedMoveRequestSchema` (`destination` = `pointSchema`, `sessionId` =
-`z.string().uuid()`, `sequence` = `z.number().int().min(1)`), `robotIdParamSchema`,
+`z.string().uuid()`, `sequence` = `z.number().int().min(1)`) *(sustituido por RC-01 rev2:
+`moveCommandSchema` de la spec 003; error `422 INVALID_MOVE_REQUEST`)*, `robotIdParamSchema`,
 `incidentIdParamSchema` e `incidentListQuerySchema` (`robotId` opcional). `GuardianDecision`
 añade `zoneName: string | null` para guardar la zona en el incidente.
 
@@ -174,6 +196,9 @@ export function evaluateRecovery(input: {
 ```
 `ruleForDecision(code: DecisionCode): RuleId` (pura) traduce el código de denegación a la regla
 del catálogo `RULES` de la spec 001 (R5.5).
+**[RC-01 rev2]** Sustituido: esta spec **no** implementa `ruleForDecision`. Consume la única
+definición de la spec 001 (`domain/src/rules/catalog.ts`, `ruleForDecision(code): RuleId | null`)
+y estrecha el tipo para los códigos de denegación y `POSITION_QUALITY_LOST` (`R-SIGNAL-01`).
 
 ### 3. Máquina de estados — `rules/stateMachine.ts`
 
@@ -209,6 +234,10 @@ transiciones alcanzables con su causa:
 | T7 | `RECOVERING → IDLE` | `RECOVER_COMPLETED` | `recover` (misma transacción) |
 | T8 | `MOVING → SAFE_STOP` | `BOOTSTRAP_MOVING_PERSISTED` | arranque |
 | T9 | `∅ → IDLE` | `ROBOT_REGISTERED` | alta de robot (spec 003) |
+| T10 **[RC-01 rev2]** | `∅ → <estado persistido>` | `MIGRATION_BASELINE` | migración 010 (una vez por robot existente) |
+
+**[RC-01 rev2]** T5 crea además el incidente `R-SIGNAL-01` (R5.11). T10 no pasa por `canTransition`:
+la escribe la migración (escritora autorizada del esquema, R10.5).
 
 `canTransition` deja de aceptar cualquier otra pareja: es una lista blanca (las celdas de la
 tabla §2.2 de requirements que el orden de §3 hace inalcanzables quedan como "rechazo sin
@@ -239,6 +268,9 @@ Orquesta (SOLID-D, inyección manual de repositorios):
    `services/floorBounds.ts`) antes de retirar `movementService`.
 3. Sesión vigente del robot ≠ `sessionId` → `409 INVALID_SESSION` (auditado).
 4. `sequence ≤ lastSequence` → `409 DUPLICATE_EVENT` (auditado). Si pasa, la secuencia se consume.
+   **[RC-01 rev2]** Los pasos 3–4 usan `checkSequence` y `sessionRepository` de la spec 003; el
+   rechazo se devuelve como `{ kind: 'rejected' }` y la transacción se **confirma** con su fila de
+   `audit_log` (B-5).
 5. `evaluateMovement` con la fila del robot.
 6. `AUTHORIZED` → T1 + T2 (posición = destino). `DENIED` → crea el incidente (con `robot_id`,
    `rule = ruleForDecision(code)`, `zoneName`) y aplica T3/T4 con el `incidentId` en `detail`.
@@ -253,15 +285,31 @@ Orquesta (SOLID-D, inyección manual de repositorios):
 no coincide → `409 POSITION_CONFLICT`; fuera del plano → `422 POSITION_OUT_OF_BOUNDS`.
 `UNRELIABLE`/`MISSING`: fija la calidad, ignora la posición y, si el robot está en `IDLE`, aplica
 T5. Siempre audita (`POSITION_READING`/`POSITION_CONFLICT`).
+**[RC-01 rev2]** Con T5 crea el incidente `R-SIGNAL-01` (`decision_code = POSITION_QUALITY_LOST`,
+origen = destino = posición actual, `zone_name` NULL) y pone su `incidentId` en el `detail` de la
+transición. `POSITION_CONFLICT` es un resultado rechazado (auditoría confirmada).
 
 `startSession(robotId)` → genera un UUID, sustituye la sesión vigente (`last_sequence = 0`) y
-audita `SESSION_STARTED`.
+audita `SESSION_STARTED`. *(Sustituido por RC-01 rev2: lo implementa `sessionService.startSession`
+de la spec 003; esta spec no lo define.)*
 
-`initRobot(robotId)` → crea la fila de estado inicial (`IDLE`, `RELIABLE`, (120, 90)) y aplica T9.
+`initRobot(robotId, position)` → crea la fila de estado inicial (`IDLE`, `RELIABLE`, `position`) y aplica T9. **[RC-01 rev2]** La posición la decide quien da de alta el robot (Q-E): el catálogo de la 003 pasa (120, 90) para los robots nuevos; la semilla usa (160, 123) y (488, 290).
+**[RC-01 rev2]** `INSERT` simple (sin `OR REPLACE`/`OR IGNORE`): si la fila existe, falla con error
+interno y la transacción del alta se revierte. Antes de crear nada valida que (120, 90) quede
+fuera de toda zona **activa** expandida por r+m; si no, devuelve
+`{ kind: 'rejected', code: 'ROBOT_START_IN_RESTRICTED_ZONE' }`, audita el rechazo y el catálogo
+responde 409 sin crear el robot.
 La invoca el servicio de catálogo de la spec 003 dentro de la misma transacción que el alta, para
 que nadie más escriba en `robot_state`.
 
 `getState(robotId)` → `RobotStatus`.
+
+**[RC-01 rev2] Rechazos (B-5).** `move`, `recover`, `setPosition` e `initRobot` devuelven
+`ServiceResult`. Ningún rechazo auditable lanza excepción dentro de la transacción: el servicio
+escribe la fila de `audit_log`, termina la transacción con éxito y el controller traduce
+`rejected` a 409 (`REJECTED` de `move` sigue siendo un `MoveResponse`; el resto, `{ code, cause?,
+message }`). Solo la validación de entrada (422), los 404 y los fallos internos (500) usan
+`AppError`.
 
 Registro de evaluaciones (R5.1) tras el refuerzo: `AUTHORIZED` queda en `state_transition_log`
 (T1 con destino, sesión y secuencia en `detail`); las denegaciones en `incidents` + transición; los
@@ -288,6 +336,8 @@ como histórico).
 ```
 > Resuelve el bloqueo PD-09: sin esta vía, tras el arranque (`MISSING`) el robot nunca podría
 > moverse ni recuperarse. El seed deja `RELIABLE`; solo el reinicio vuelve a `MISSING`.
+> *(Sustituido por RC-01 rev2: ruta `POST /api/robots/:robotId/position`; el reinicio no vuelve a
+> `MISSING`.)*
 
 > *Sustituido por RC-01:* una lectura **nunca relocaliza** el robot (hoy `setPosition` fija
 > cualquier posición, lo que permite liberar un robot "teletransportándolo" fuera de una zona y
@@ -319,6 +369,8 @@ packages/backend/src/
 ├── schemas/robot.schema.ts             # moveSchema, positionSchema
 └── db/bootstrap.ts                     # reinicio seguro
 ```
+> *(Sustituido por RC-01 rev2:* `routes/robotRoutes.ts` (`/api/robot/*`) y el alias
+> `moveSchema = moveRequestSchema` de `domain/src/schemas/robot.schema.ts` se retiran en U1-5.)*
 
 #### Mapeo decisión → HTTP (controller)
 | Decisión | HTTP | Cuerpo |
@@ -328,7 +380,7 @@ packages/backend/src/
 | Rechazo por estado (`SAFE_STOP_ACTIVE`/`BUSY`) | 409 | `decision: REJECTED` + `code` + estado |
 | `POST /position` OK | 200 | posición + `positionQuality` |
 | `POST /recover` OK | 200 | estado `IDLE` + posición |
-| payload inválido | 422 | `{ code: 'INVALID_DESTINATION' | 'INVALID_POSITION', message }` |
+| payload inválido | 422 | `{ code: 'INVALID_DESTINATION' | 'INVALID_POSITION', message }` *(RC-01 rev2: `INVALID_MOVE_REQUEST` en `move`)* |
 | **[RC-01]** Robot o incidente inexistente | 404 | `{ code: 'ROBOT_NOT_FOUND' \| 'INCIDENT_NOT_FOUND', message }` |
 | **[RC-01]** Sesión inválida / secuencia repetida | 409 | `{ code: 'INVALID_SESSION' \| 'DUPLICATE_EVENT', message }` |
 | **[RC-01]** `POST /recover` en `IDLE` | 200 | `RecoverResponse` con `transitioned: false` |
@@ -336,6 +388,8 @@ packages/backend/src/
 | **[RC-01]** `POST /position` `RELIABLE` no coincidente | 409 | `{ code: 'POSITION_CONFLICT', message }` |
 | **[RC-01]** `POST /sessions` | 201 | `{ sessionId }` |
 | **[RC-01]** `GET /api/incidents[?robotId]`, `/:id` | 200 | `Incident[]` / `IncidentDetail` |
+| **[RC-01 rev2]** Alta en zona activa (spec 003) | 409 | `{ code: 'ROBOT_START_IN_RESTRICTED_ZONE', message }` |
+| **[RC-01 rev2]** Cuerpo de `move` inválido | 422 | `{ code: 'INVALID_MOVE_REQUEST', message }` |
 
 **[RC-01] Rutas tras el refuerzo**
 ```
@@ -349,6 +403,8 @@ packages/backend/src/
 Se ELIMINAN: routes/robotRoutes.ts (/api/robot singular, sustituida por guardianRoutes),
 routes/simulationRoutes.ts, controllers/simulationController.ts, services/movementService.ts,
 rules/watchmanRule.ts y sus pruebas; tipos Decision/MoveResult/RobotSnapshot de la spec 003.
+[RC-01 rev2] Además: los métodos get()/save() de robotRepository (contrato RobotSnapshot de la
+003; quedan getStatus/saveState/saveQuality por robot) y el alias moveSchema.
 ```
 El catálogo (`/api/robots`, `/api/robots/:robotId`) lo monta la spec 003; ambos routers comparten
 el prefijo `/api/robots`.
@@ -397,6 +453,28 @@ ALTER TABLE robot_state ADD COLUMN position_quality TEXT NOT NULL DEFAULT 'MISSI
 > `RELIABLE` del seed y solo una señal de pérdida explícita lo cambia (ADR-10, `db/bootstrap.ts`).
 
 ### [RC-01] Migraciones del refuerzo
+
+> **[RC-01 rev2] Orden de entrega y de aplicación (Q-G):** `007_create_robots` (spec 003) →
+> `008_robot_state_per_robot` → `009_incidents_robot_rule_zone` → `010_create_state_transition_log`
+> → `011_audit_log_generalize` → `012_create_robot_sessions` (spec 003), todas en la unidad U1;
+> `013_create_zone_change_log` (spec 001) en U2. `migrate.ts` se endurece: si una migración
+> pendiente tiene número menor que la última aplicada, el arranque falla con un error claro (hoy
+> `migrate.ts:25-28` las aplica en orden alfabético sin esa comprobación). Contenido actualizado:
+> - **008:** `position_quality` **sin `DEFAULT`** (sustituye a `DEFAULT 'RELIABLE'`; toda inserción
+>   da el valor explícito, I-6). Base existente: la fila `id = 1` pasa a A1 conservando estado,
+>   posición y calidad; V2 en (488, 290). Base nueva: 007 siembra A1/V2 y 008 crea sus filas en
+>   (160, 123) y (488, 290) (Q-E). Fechas con `strftime('%Y-%m-%dT%H:%M:%fZ','now')`.
+> - **009 (renombrada `009_incidents_robot_rule_zone.sql`):** `robot_id INTEGER REFERENCES
+>   robots(id)`, `rule TEXT` y **`zone_name TEXT`** (B-4), `NULL` en las filas antiguas; amplía el
+>   conjunto de `decision_code` con `POSITION_QUALITY_LOST`.
+> - **010:** además de la tabla, `INSERT INTO state_transition_log (robot_id, from_state, to_state,
+>   cause) SELECT robot_id, NULL, state, 'MIGRATION_BASELINE' FROM robot_state` (Q-H). El CHECK
+>   pasa a `from_state IS NOT NULL OR cause IN ('ROBOT_REGISTERED', 'MIGRATION_BASELINE')`.
+> - **011:** añade `ROBOT_START_IN_RESTRICTED_ZONE` al CHECK de `event_code`.
+> - **012:** la define la spec 003 (única definición); esta spec la cita sin copiarla.
+> - Fechas antiguas (`datetime('now')` en `incidents` y `audit_log`): los repositorios las normalizan
+>   a ISO-8601 UTC al leer (M-10). El tipo de fila interno del repositorio de incidentes se llama
+>   `IncidentRow` para no chocar con el tipo de dominio `Incident` (M-11).
 Numeración global propuesta (a coordinar con las specs 001 y 003, que añaden sus propias
 migraciones en el mismo refuerzo). Prerrequisito: la migración de la spec 003 que crea `robots` y
 siembra "Aspiradora A1" (160, 123) y "Vigilante V2" (488, 290), prevista como
@@ -405,7 +483,7 @@ siembra "Aspiradora A1" (160, 123) y "Vigilante V2" (488, 290), prevista como
 | Migración | Contenido |
 |-----------|-----------|
 | `008_robot_state_per_robot.sql` | Reconstruye `robot_state` con `robot_id INTEGER PRIMARY KEY REFERENCES robots(id)`, los 5 estados, `position_quality DEFAULT 'RELIABLE'` (corrige el `'MISSING'` de la 005) y `updated_at`. Copia la fila `id = 1` como estado de "Aspiradora A1" (conserva estado, posición y calidad) e inserta el estado inicial de "Vigilante V2" en (488, 290). |
-| `009_incidents_robot_rule.sql` | `ALTER TABLE incidents ADD COLUMN robot_id INTEGER REFERENCES robots(id)` y `ADD COLUMN rule TEXT`. Las filas existentes quedan con `NULL` (no se reescriben: tabla append-only); el repositorio deriva `rule` del `decision_code` al leerlas y devuelve `robotId: null`. Las filas nuevas los exigen (validado en el repositorio y con prueba). |
+| `009_incidents_robot_rule_zone.sql` (rev2: + `zone_name`) | `ALTER TABLE incidents ADD COLUMN robot_id INTEGER REFERENCES robots(id)` y `ADD COLUMN rule TEXT`. Las filas existentes quedan con `NULL` (no se reescriben: tabla append-only); el repositorio deriva `rule` del `decision_code` al leerlas y devuelve `robotId: null`. Las filas nuevas los exigen (validado en el repositorio y con prueba). |
 | `010_create_state_transition_log.sql` | Tabla `state_transition_log` + triggers append-only. |
 | `011_audit_log_generalize.sql` | Reconstruye `audit_log` copiando **todas** las filas sin modificarlas: añade `robot_id`, hace `x`/`y` nullable (antes `dest_x`/`dest_y NOT NULL`) y añade `detail`; amplía `event_code` (CHECK) a `SAFE_STOP_ACTIVE`, `BUSY`, `INVALID_SESSION`, `DUPLICATE_EVENT`, `SESSION_STARTED`, `RECOVER_NOOP`, `RECOVERY_NOT_ALLOWED`, `POSITION_READING`, `POSITION_CONFLICT`. Recrea los triggers. |
 | `012_create_robot_sessions.sql` | Tabla `robot_sessions` (una fila por robot). **La crea la spec 003** (dueña del requisito de sesiones); aquí solo se consume. |
@@ -422,8 +500,10 @@ CREATE TABLE IF NOT EXISTS state_transition_log (
   detail     TEXT,               -- JSON opcional: destino/sesión/secuencia, incidentId, snapshot
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   CHECK (from_state IS NOT NULL OR cause = 'ROBOT_REGISTERED')
+  -- [RC-01 rev2] → CHECK (from_state IS NOT NULL OR cause IN ('ROBOT_REGISTERED','MIGRATION_BASELINE'))
 );
 
+-- [RC-01 rev2] Referencia informativa: la definición vigente es la de la spec 003 (dueña).
 CREATE TABLE IF NOT EXISTS robot_sessions (
   robot_id         INTEGER PRIMARY KEY REFERENCES robots(id),
   session_id       TEXT    NOT NULL UNIQUE,
@@ -439,7 +519,8 @@ CREATE TABLE IF NOT EXISTS robot_sessions (
 > Notas: SQLite no cambia `PRAGMA foreign_keys` dentro de una transacción, y las reconstrucciones
 > (008, 011) se hacen dentro de la transacción de `migrate.ts`; ninguna tabla referencia todavía
 > `robot_state` ni `audit_log`, así que el `DROP` es seguro. No se añaden transiciones retroactivas
-> por el pasado (no se fabrican registros, art. XV).
+> por el pasado (no se fabrican registros, art. XV). **[RC-01 rev2]** La fila base
+> `MIGRATION_BASELINE` no es retroactiva: registra el estado en el momento de crear el registro.
 
 ## Error Handling
 
@@ -454,6 +535,9 @@ CREATE TABLE IF NOT EXISTS robot_sessions (
   (`{ code, cause, message }`) para el 409 de `recover`. `REJECTED` no es un error: es un
   `MoveResponse` con 409. Cualquier excepción revierte la transacción completa (estado,
   transiciones, incidente, auditoría y sesión).
+- **[RC-01 rev2] (B-5)** Por eso ningún rechazo auditable se lanza como excepción: se devuelve como
+  `ServiceResult` rechazado y la transacción se confirma con la auditoría. Cada 409 auditable
+  tiene una prueba que lee `audit_log` después de la respuesta.
 
 ## Correctness Properties
 
@@ -515,6 +599,9 @@ con `BUSY` por culpa del anterior.
 Si `positionQuality` es `MISSING`/`UNRELIABLE` (por una señal de pérdida explícita) y luego se aporta una lectura con
 `quality = RELIABLE` vía `POST /api/robot/position`, entonces un movimiento posterior a un
 destino libre deja de denegarse por datos y puede autorizarse (no hay bloqueo permanente).
+*(Sustituido por RC-01 rev2: la ruta es `POST /api/robots/:robotId/position`, la lectura `RELIABLE`
+debe coincidir con la posición actual, y como la pérdida lleva a `DEGRADED`, hace falta además
+`recover` antes del movimiento.)*
 
 **Validates: Requirements 8.1, 8.3**
 
@@ -532,7 +619,10 @@ prueba de arquitectura que recorre los imports de `src` (incluidos `import type`
 literal `robot_state` en sentencias SQL fuera de `repositories/robotRepository.ts`, y (b)
 `/api/simulation/*` y `/api/robot/*` → 404.
 
-**Validates: Requirements 10.1–10.3**
+**[RC-01 rev2]** Las migraciones `.sql` son escritoras autorizadas solo en el despliegue del
+esquema (R10.5); la prueba de arquitectura analiza `src/` y no las cuenta.
+
+**Validates: Requirements 10.1–10.3, 10.5**
 
 ### Property 13 [RC-01]: Una lectura nunca relocaliza
 Para toda lectura de posición, la posición persistida del robot después de la lectura es igual a
@@ -551,6 +641,12 @@ Una operación sobre el robot A no cambia el estado, la posición, la calidad ni
 robot B.
 
 **Validates: Requirements 12.1, 12.4**
+
+### Property 16 [RC-01 rev2]: Todo rechazo auditado queda en la base
+Para toda operación que responde con un rechazo auditable (409), existe después una fila nueva en
+`audit_log` con su código, y el estado del robot no ha cambiado.
+
+**Validates: Requirements 5.10, 4.4, 8.5, 11.3, 11.4, 12.2**
 
 ## Testing Strategy
 
@@ -592,17 +688,25 @@ robot B.
 | DD-207 | Reinicio seguro degrada `MOVING`→`SAFE_STOP` (ADR-10) | Reanudar movimiento | No mover a ciegas tras reinicio |
 | DD-208 | Reutilizar `isCollision`/`CollisionType` (spec 001) | Reimplementar geometría | Fuente única; sin duplicación |
 | DD-209 | `MOVING` transitorio; el servicio completa a `IDLE` en la misma solicitud | Dejar `MOVING` persistente | Evita bloqueo `BUSY` permanente tras el primer movimiento (defecto corregido) |
-| DD-210 | `POST /api/robot/position` + seed `RELIABLE`; reinicio → `MISSING` | Esperar sensores (HU-06) | Sustituto de prototipo explícito; evita el bloqueo PD-09 sin salida |
+| DD-210 | `POST /api/robot/position` + seed `RELIABLE`; reinicio → `MISSING` | Esperar sensores (HU-06) | Sustituto de prototipo explícito; evita el bloqueo PD-09 sin salida. *(Sustituido por RC-01/rev2: el reinicio conserva la calidad; ruta por robot)* |
 | DD-211 [RC-01] | Vigilante único; retirada de `/api/simulation/*` y `/api/robot/*` | Mantener ambos | Dos caminos al estado violan el art. III; el `reset` sin registro era el hallazgo B-1 |
 | DD-212 [RC-01] | `state_transition_log` con helper `transition` | Registrar desde cada rama del servicio | Un solo punto garantiza que ninguna transición se escape (Property 11) |
 | DD-213 [RC-01] | `MOVING` y `RECOVERING` se persisten dentro de la transacción | Mantenerlos solo en memoria (DD-209) | El registro debe coincidir con lo persistido; sustituye la parte de DD-209 que no persistía `MOVING` |
 | DD-214 [RC-01] | Estado por robot (`robot_state.robot_id`) | Fila única | Catálogo de robots de la HU-01 del prototipo (spec 003) |
 | DD-215 [RC-01] | Sesión vigente + secuencia estrictamente creciente, validadas antes del vigilante | Idempotencia por clave arbitraria | Modelo del prototipo (robot, sesión, secuencia); un reintento no duplica incidentes |
 | DD-216 [RC-01] | Lectura `RELIABLE` solo si coincide con la posición actual | Permitir relocalizar | Cierra el "teletransporte" para salir de una parada |
-| DD-217 [RC-01] | Señal de pérdida en `IDLE` → `DEGRADED`, sin incidente | Esperar al siguiente `move` | Fallo seguro inmediato (art. III); el incidente modela evaluaciones de movimiento |
+| DD-217 [RC-01] | Señal de pérdida en `IDLE` → `DEGRADED`, sin incidente | Esperar al siguiente `move` | Fallo seguro inmediato (art. III); el incidente modela evaluaciones de movimiento. *(Sustituido por RC-01 rev2 → DD-221: sí crea incidente `R-SIGNAL-01`)* |
 | DD-218 [RC-01] | `rule` guardada en el incidente; filas antiguas sin reescribir | Derivarla siempre al leer | El incidente documenta la regla vigente al decidir; el histórico es inmutable |
 | DD-219 [RC-01] | `audit_log` reconstruida copiando todas las filas | Tabla de auditoría nueva | Un único log de eventos sin transición; no se pierde ni altera ninguna fila |
 | DD-220 [RC-01] | `initRobot` en `guardianService`, invocado por el alta de la spec 003 | Que el catálogo escriba `robot_state` | Mantiene un único escritor (Property 12) |
+| DD-221 [RC-01 rev2] | La pérdida de señal en `IDLE` crea un incidente `R-SIGNAL-01` | Sin incidente (DD-217) | El operador la ve en la vista Incidentes, como en el prototipo (Q-B) |
+| DD-222 [RC-01 rev2] | Rechazos auditables como `ServiceResult`, no excepciones | Lanzar `AppError(409)` | La excepción revertiría la fila de auditoría (B-5) |
+| DD-223 [RC-01 rev2] | `zone_name` persistido en el incidente | Deducirla del snapshot | No determinista con varias zonas (B-4) |
+| DD-224 [RC-01 rev2] | Fila base `MIGRATION_BASELINE` al crear el registro de transiciones | Registro sin estado inicial | R9.7 verificable para robots anteriores; evento real (art. XV) |
+| DD-225 [RC-01 rev2] | `position_quality` sin `DEFAULT`; `initRobot` con `INSERT` simple | `DEFAULT 'RELIABLE'`, `INSERT OR REPLACE` | Un valor confiable por omisión y un reinicio silencioso son vías para saltarse `recover` (I-6) |
+| DD-226 [RC-01 rev2] | Alta en zona activa → `409 ROBOT_START_IN_RESTRICTED_ZONE` | Iniciar en `SAFE_STOP` / aceptar `IDLE` | Decisión del humano (Q-D) |
+| DD-227 [RC-01 rev2] | Migraciones en orden de entrega + `migrate.ts` rechaza números menores que el último aplicado | Aplicar en orden alfabético | Bases nuevas y existentes con el mismo historial (I-2, Q-G) |
+| DD-228 [RC-01 rev2] | Sesiones, `MoveCommand`, `LastRequest` y `checkSequence` de la 003; `ruleForDecision` de la 001 | Definirlos también aquí | Una sola definición por pieza (B-3, I-5) |
 
 ## Dependencias entre HU
 - HU-04/HU-05 dependen de la spec 001 (geometría). La spec 003 consume este contrato.
@@ -617,8 +721,11 @@ robot B.
 - [ ] Se confirma el mapeo decisión→HTTP (DD-203) y el trato de `ZONE_DATA_UNAVAILABLE` (DD-204).
 - [ ] Se confirma el reinicio seguro ADR-10 (DD-207).
 - [ ] **[RC-01]** Se confirma el refuerzo: vigilante único (DD-211), registro de transiciones (DD-212, DD-213), estado por robot (DD-214), sesión y secuencia (DD-215) y lecturas sin relocalización (DD-216).
+- [ ] **[RC-01 rev2]** Se confirman DD-221..DD-228 (decisiones Q-B, Q-D, Q-G, Q-H del humano ya tomadas el 2026-11-23; falta la aprobación del documento).
 
-## Preguntas abiertas [RC-01]
+## Preguntas abiertas [RC-01] — resueltas en RC-01 rev2 (2026-11-23)
+> Q-A: deuda documentada (requirements §12b, "Riesgos aceptados"). Q-B: botón habilitado con
+> incidente `R-SIGNAL-01` (DD-221). Q-C: aprobada la parte implementada (cabecera).
 - **Q-A.** Autenticación del operador (HU-02/HU-05 del prototipo; stack con bcrypt + JWT): ¿requisito transversal ahora (spec 001) o deuda documentada?
 - **Q-B.** Botón "Perder conexión" en la UI: ¿se habilita usando `POST /api/robots/:robotId/position` con `MISSING`, o queda reservado como inyección de fallos?
 - **Q-C.** Aprobación formal de esta spec, implementada en 773823a pero aún en "Borrador" (art. XII).

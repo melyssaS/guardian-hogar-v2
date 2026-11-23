@@ -23,3 +23,10 @@ export const zoneOutOfBounds = () =>
   new AppError(422, 'ZONE_OUT_OF_BOUNDS', 'Zone must be fully inside the floor plan');
 
 export const validationError = (message: string) => new AppError(422, 'VALIDATION_ERROR', message);
+
+// Spec 003 — catálogo de errores de /api/simulation
+export const destinationOutOfBounds = () =>
+  new AppError(422, 'DESTINATION_OUT_OF_BOUNDS', 'Destination outside floor');
+
+export const invalidDestination = (message: string) =>
+  new AppError(422, 'INVALID_DESTINATION', message);

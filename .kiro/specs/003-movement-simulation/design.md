@@ -3,7 +3,7 @@
 **Spec:** `003-movement-simulation`
 **Fase MADA:** DISEÑAR
 **HU cubiertas:** HU-03
-**Estado:** Borrador — pendiente de aprobación humana (compuerta Fase 2)
+**Estado:** Aprobado por el humano (2026-11-22, compuerta Fase 2)
 
 ## Overview
 
@@ -285,6 +285,6 @@ solicitud y, con el mismo estado y zonas, la misma decisión.
 ---
 
 ## Compuerta Fase 2 (DISEÑAR)
-- [ ] El humano aprueba explícitamente este `design.md`.
-- [ ] Se confirma el mapeo decisión→HTTP (DD-101/DD-102).
-- [ ] Se confirma `reset` como salida de SAFE_STOP para la demo (DD-106).
+- [x] El humano aprueba explícitamente este `design.md`. (2026-11-22)
+- [x] Se confirma el mapeo decisión→HTTP (DD-101/DD-102). (aprobado junto con el design)
+- [x] Se confirma `reset` como salida de SAFE_STOP para la demo (DD-106). (aprobado junto con el design)

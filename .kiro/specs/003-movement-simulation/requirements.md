@@ -3,7 +3,7 @@
 **Spec:** `003-movement-simulation`
 **Fase MADA:** ENTENDER
 **HU cubiertas:** HU-03
-**Estado:** Borrador — pendiente de aprobación humana (compuerta Fase 1)
+**Estado:** Aprobado por el humano (2026-11-22, compuerta Fase 1)
 
 > Trazabilidad: Necesidad → Peligro STPA → Requisito → Regla → Historia → Prueba → Evidencia.
 > Este documento captura **qué** debe hacer el sistema, no **cómo**.
@@ -284,4 +284,4 @@ HU-03
 
 ## 10. Compuerta Fase 1 (ENTENDER)
 
-- [ ] El humano aprueba explícitamente este `requirements.md` antes de pasar a DISEÑAR.
+- [x] El humano aprueba explícitamente este `requirements.md` antes de pasar a DISEÑAR. (2026-11-22)

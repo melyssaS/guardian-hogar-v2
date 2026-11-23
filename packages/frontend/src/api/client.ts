@@ -1,4 +1,12 @@
-import type { UpdateZoneBody, Zone, ZoneActiveFilter, ZoneInput } from '../types';
+import type {
+  MoveResult,
+  Point,
+  RobotSnapshot,
+  UpdateZoneBody,
+  Zone,
+  ZoneActiveFilter,
+  ZoneInput,
+} from '../types';
 
 const BASE_URL: string = import.meta.env.VITE_API_URL ?? '';
 
@@ -8,6 +16,8 @@ export class ApiError extends Error {
     public readonly status: number,
     public readonly code: string,
     message: string,
+    /** Cuerpo JSON de la respuesta, si lo hubo (p. ej. el MoveResult de un 409). */
+    public readonly body: unknown = null,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -37,8 +47,8 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
   if (res.status === 204) return undefined as T;
   const body: unknown = await res.json().catch(() => null);
   if (!res.ok) {
-    if (isErrorBody(body)) throw new ApiError(res.status, body.code, body.message);
-    throw new ApiError(res.status, 'HTTP_ERROR', `Error HTTP ${res.status}`);
+    if (isErrorBody(body)) throw new ApiError(res.status, body.code, body.message, body);
+    throw new ApiError(res.status, 'HTTP_ERROR', `Error HTTP ${res.status}`, body);
   }
   return body as T;
 }
@@ -55,3 +65,34 @@ export const zonesApi = {
 };
 
 export type ZonesApi = typeof zonesApi;
+
+function isMoveResult(value: unknown): value is MoveResult {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { decision?: unknown }).decision === 'string'
+  );
+}
+
+/** /api/simulation — spec 003 §5. */
+export const simulationApi = {
+  getRobot: () => request<RobotSnapshot>('/api/simulation/robot'),
+  /**
+   * Un 409 (DENIED_SAFE_STOP) es una decisión del vigilante con su MoveResult: se devuelve
+   * para mostrarla (DD-102). El resto de errores (422, red…) se propagan como ApiError.
+   */
+  move: async (destination: Point): Promise<MoveResult> => {
+    try {
+      return await request<MoveResult>('/api/simulation/move', {
+        method: 'POST',
+        body: JSON.stringify({ destination }),
+      });
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409 && isMoveResult(err.body)) return err.body;
+      throw err;
+    }
+  },
+  reset: () => request<RobotSnapshot>('/api/simulation/reset', { method: 'POST' }),
+};
+
+export type SimulationApi = typeof simulationApi;

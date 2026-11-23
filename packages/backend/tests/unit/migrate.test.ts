@@ -6,12 +6,18 @@ import { createDatabase } from '../../src/db/connection.js';
 import { migrate } from '../../src/db/migrate.js';
 
 describe('migrate (RF-04.2)', () => {
-  it('crea la tabla zones y registra la versión', () => {
+  const ALL = ['001_create_zones.sql', '002_create_robot_state.sql', '003_create_movement_log.sql'];
+
+  it('crea las tablas y registra las versiones en orden', () => {
     const db = createDatabase(':memory:');
-    expect(migrate(db)).toEqual(['001_create_zones.sql']);
-    const versions = db.prepare('SELECT version FROM schema_migrations').all();
-    expect(versions).toEqual([{ version: '001_create_zones.sql' }]);
-    expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'zones'").get()).toBeDefined();
+    expect(migrate(db)).toEqual(ALL);
+    const versions = db.prepare('SELECT version FROM schema_migrations ORDER BY version').all();
+    expect(versions).toEqual(ALL.map((version) => ({ version })));
+    for (const table of ['zones', 'robot_state', 'movement_log']) {
+      expect(
+        db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(table),
+      ).toBeDefined();
+    }
   });
 
   it('es idempotente', () => {

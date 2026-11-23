@@ -4,8 +4,12 @@ import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import type { Db } from './db/connection.js';
 import { errorHandler } from './middlewares/errorHandler.js';
+import { createMovementLogRepository } from './repositories/movementLogRepository.js';
+import { createRobotRepository } from './repositories/robotRepository.js';
 import { createZoneRepository } from './repositories/zoneRepository.js';
+import { createSimulationRoutes } from './routes/simulationRoutes.js';
 import { createZoneRoutes } from './routes/zoneRoutes.js';
+import { createMovementService } from './services/movementService.js';
 import { createZoneService } from './services/zoneService.js';
 
 export interface AppOptions {
@@ -44,8 +48,16 @@ export function createApp(db: Db, options: AppOptions = {}): Express {
     res.json({ status: 'ok' });
   });
 
-  const zoneService = createZoneService(createZoneRepository(db));
-  app.use('/api/zones', createZoneRoutes(zoneService));
+  const zoneRepository = createZoneRepository(db);
+  app.use('/api/zones', createZoneRoutes(createZoneService(zoneRepository)));
+
+  const movementService = createMovementService({
+    robots: createRobotRepository(db),
+    movementLog: createMovementLogRepository(db),
+    getActiveZones: () => zoneRepository.findAll('active'),
+    runInTransaction: (fn) => db.transaction(fn)(),
+  });
+  app.use('/api/simulation', createSimulationRoutes(movementService));
 
   app.use('/api', (_req, res) => {
     res.status(404).json({ code: 'NOT_FOUND', message: 'Route not found' });

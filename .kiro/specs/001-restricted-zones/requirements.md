@@ -1,8 +1,17 @@
 # Spec 001 — Zonas restringidas (`001-restricted-zones`)
 # Requirements Document
 **Fase MADA:** ENTENDER
-**HU cubiertas:** HU-01, HU-02
-**Estado:** Borrador — pendiente de aprobación humana (compuerta Fase 1)
+**HU cubiertas:** HU-02 del backlog del prototipo («Configurar zonas restringidas»). El plano 2D,
+identificado como «HU-01» en esta spec, es soporte de HU-02/HU-03 del backlog **[RC-01]**.
+**Estado:** Borrador — implementado; refuerzo RC-01 pendiente de aprobación humana
+
+> **[RC-01] Nota de numeración.** En el backlog del prototipo (`prototipo/Guardian_Hogar_Artifact_V2.html`)
+> y en el steering (`.kiro/steering/architecture.md`, `frontend.md`), **HU-01 = «Registrar y consultar
+> robots»** y **HU-02 = «Configurar zonas restringidas»**. Esta spec nació llamando «HU-01» al plano. Para
+> no renumerar lo ya implementado y probado, **se conservan todos los identificadores** (`RF-01`,
+> `CA-01.x`, etc.) y solo se cambia el rótulo: lo marcado como «HU-01» en esta spec es el **plano**, que
+> sirve de soporte a HU-02 (ver y gestionar zonas) y a HU-03 (simular movimiento sobre el plano). La
+> HU-01 del backlog (catálogo de robots) se especifica en la spec 003 (RC-01).
 
 > Trazabilidad: Necesidad → Requisito → HU → Regla → Prueba → Evidencia.
 > Este documento captura **qué** debe hacer el sistema, no **cómo**.
@@ -11,19 +20,31 @@
 
 ## Introduction
 
-Esta spec cubre las HU-01 y HU-02 de Guardián Hogar: visualizar un plano 2D de la vivienda con las zonas restringidas activas, y gestionar (crear, modificar, activar, desactivar, eliminar) esas zonas. El corazón de la funcionalidad es un modelo geométrico único (sección «Modelo geométrico») que decide cuándo una trayectoria del robot colisiona con una zona, aplicando una expansión conservadora `r + m` y bordes inclusivos.
+Esta spec cubre el plano 2D (rotulado «HU-01» en esta spec; soporte de HU-02/HU-03 del backlog) y la HU-02 de Guardián Hogar: visualizar un plano 2D de la vivienda con las zonas restringidas activas, y gestionar (crear, modificar, activar, desactivar, eliminar) esas zonas. **[RC-01]** Además, cada cambio de zonas queda registrado y la spec define el catálogo de reglas de seguridad (`RULES`) que usa el vigilante (spec 002) y que la vista «Zonas y reglas» muestra. El corazón de la funcionalidad es un modelo geométrico único (sección «Modelo geométrico») que decide cuándo una trayectoria del robot colisiona con una zona, aplicando una expansión conservadora `r + m` y bordes inclusivos.
 
 ---
 
 ## 1. Historias de usuario
 
-### HU-01 — Plano 2D con zonas activas
+### HU-01 (de esta spec) — Plano 2D con zonas activas
+> **[RC-01]** Rótulo conservado por trazabilidad; en el backlog del prototipo esto es soporte de
+> HU-02/HU-03, no la HU-01 («Registrar y consultar robots», spec 003).
+
 > Como **operador**, quiero **ver un plano 2D de la vivienda con cuadrícula y las zonas
 > activas destacadas**, para **conocer el espacio donde se mueve el robot**.
 
 ### HU-02 — Gestión de zonas restringidas
 > Como **operador**, quiero **crear, modificar, activar, desactivar y eliminar zonas
 > restringidas**, para **impedir que el robot entre en ellas**.
+
+> **[RC-01]** Criterios del backlog del prototipo para HU-02 y dónde se cubren:
+> | Criterio del prototipo | Cobertura |
+> |------------------------|-----------|
+> | Permitir o restringir habitaciones existentes | RF-02.3, CA-02.6 (implementado) |
+> | La decisión usa la configuración vigente | Spec 002/003: el vigilante lee las zonas activas en cada evaluación |
+> | El cambio de reglas se registra | **RF-05 (nuevo, RC-01)** |
+> | Configuraciones válidas y autorizadas | Válidas: RF-03 (implementado). Autorizadas: **Q-A** (pendiente de decisión humana) |
+> | (Vista) Catálogo de reglas | **RF-06 (nuevo, RC-01)** |
 
 ---
 
@@ -92,6 +113,38 @@ Este modelo es compartido por backend y frontend. Reside en `@home-guardian/doma
   directo a la base desde controladores/servicios).
 - RF-04.2 El esquema se crea y evoluciona mediante **migraciones SQL versionadas**.
 
+### RF-05 — Registro de cambios de zona (HU-02) [RC-01]
+- RF-05.1 Cada alta, modificación, activación, desactivación y eliminación de una zona inserta
+  una fila en el registro de cambios de zona con: `zoneId`, `action`
+  (`CREATE` | `UPDATE` | `ACTIVATE` | `DEACTIVATE` | `DELETE`), el estado **anterior** (`before`)
+  y el **posterior** (`after`) de la zona y la fecha.
+- RF-05.2 El registro se escribe en la **misma transacción** que el cambio: si el cambio falla
+  (404, 409, 422 o error interno) no se registra nada; si el registro falla, el cambio se revierte.
+- RF-05.3 Clasificación de la acción en `PUT /api/zones/:id`:
+  - si solo cambia `active` → `ACTIVATE` (false→true) o `DEACTIVATE` (true→false);
+  - si cambia cualquier otro campo (con o sin `active`) → `UPDATE`;
+  - si la petición no cambia ningún valor → no se registra fila (no hubo cambio).
+- RF-05.4 `before` es `null` en `CREATE`; `after` es `null` en `DELETE`. El historial de una zona
+  eliminada se conserva (el registro no depende de que la zona siga existiendo).
+- RF-05.5 El registro es **inmutable**: solo inserción; la base rechaza `UPDATE` y `DELETE`.
+- RF-05.6 `GET /api/zones/changes` devuelve el historial completo, del más reciente al más antiguo.
+
+### RF-06 — Catálogo de reglas de seguridad (HU-02, HU-04, HU-05) [RC-01]
+- RF-06.1 `@home-guardian/domain` exporta la constante `RULES` con las reglas del sistema, cada una
+  con identificador, título, descripción y los códigos de decisión del vigilante (spec 002) que cubre:
+  | Id | Regla | Códigos de decisión que cubre |
+  |----|-------|-------------------------------|
+  | `R-ZONA-01` | No circular por zonas restringidas | `ORIGIN_IN_RESTRICTED_ZONE`, `RESTRICTED_ZONE_VIOLATION`, `TRAJECTORY_CROSSES_ZONE` |
+  | `R-SIGNAL-01` | Posición no confiable o ausente | `INSUFFICIENT_DATA`, `MISSING_POSITION` |
+  | `R-DATA-01` | Información de zonas no disponible | `ZONE_DATA_UNAVAILABLE` |
+- RF-06.2 Cada código de denegación del vigilante pertenece a **exactamente una** regla; los códigos
+  que no son denegaciones (`AUTHORIZED`, `SAFE_STOP_ACTIVE`, `BUSY`) no pertenecen a ninguna.
+  `ruleForDecision(code)` devuelve el id de la regla o `null`. La spec 002 la usa para rellenar
+  `incidents.rule`.
+- RF-06.3 La vista «Zonas y reglas» muestra una tarjeta «Catálogo de reglas», **solo lectura**,
+  generada a partir de `RULES` (id, título, descripción y HU relacionadas), con el estilo de la
+  tarjeta «Catálogo inicial de reglas» del prototipo. No evalúa reglas (constitución art. III).
+
 ---
 
 ## 4. Requisitos no funcionales
@@ -101,6 +154,8 @@ Este modelo es compartido por backend y frontend. Reside en `@home-guardian/doma
 - RNF-03 La lógica geométrica es **pura** y vive en `rules/` (reutilizable y testeable).
 - RNF-04 Nunca exponer stack traces; errores con `code` estable y HTTP correcto.
 - RNF-05 Las respuestas de error usan un formato uniforme `{ code, message }`.
+- RNF-06 **[RC-01]** Todo registro de auditoría (`zone_change_log`) es append-only y se escribe en
+  la misma transacción que el cambio que registra (constitución art. IV: trazabilidad).
 
 ---
 
@@ -131,6 +186,7 @@ Base: `/api/zones`
 | `GET` | `/api/zones/:id` | Obtener una zona |
 | `PUT` | `/api/zones/:id` | Modificar una zona (incluye activar/desactivar) |
 | `DELETE` | `/api/zones/:id` | Eliminar una zona |
+| `GET` | `/api/zones/changes` | **[RC-01]** Historial de cambios de zona (más reciente primero) |
 
 #### `GET /api/zones` — filtro `active`
 | Query | Resultado |
@@ -158,6 +214,22 @@ Respuestas:
 #### `DELETE /api/zones/:id`
 - `204` → eliminada.
 - `404 ZONE_NOT_FOUND` → id inexistente.
+
+#### `GET /api/zones/changes` [RC-01]
+- `200` → lista, del más reciente al más antiguo:
+```json
+[
+  {
+    "id": 7,
+    "zoneId": 5,
+    "action": "DEACTIVATE",
+    "before": { "id": 5, "name": "Pasillo", "x": 410, "y": 226, "width": 156, "height": 178, "active": true, "createdAt": "..." },
+    "after":  { "id": 5, "name": "Pasillo", "x": 410, "y": 226, "width": 156, "height": 178, "active": false, "createdAt": "..." },
+    "createdAt": "2026-11-22T21:40:00.000Z"
+  }
+]
+```
+> La ruta `/changes` se registra **antes** de `/:id` para que no se interprete como un id.
 
 ### Catálogo de errores
 | HTTP | `code` | Causa |
@@ -194,6 +266,18 @@ Respuestas:
   aparece en ningún listado.
 - **CA-02.8** Dado `GET /api/zones?active=all`, cuando se lista, entonces aparecen activas e
   inactivas.
+- **CA-02.9 [RC-01]** Dada una zona creada (activa) y después desactivada, activada, modificada y
+  eliminada, cuando se consulta `GET /api/zones/changes`, entonces aparecen cinco filas
+  (`DELETE`, `UPDATE`, `ACTIVATE`, `DEACTIVATE`, `CREATE`, en ese orden) con `before`/`after` correctos.
+- **CA-02.10 [RC-01]** Dado un cambio rechazado (409, 422 o 404), cuando se consulta el historial,
+  entonces no hay fila nueva.
+- **CA-02.11 [RC-01]** Dado el registro de cambios, cuando se intenta un `UPDATE` o `DELETE` directo
+  en la base, entonces la base lo rechaza.
+- **CA-02.12 [RC-01]** Dada la vista «Zonas y reglas», cuando se renderiza, entonces muestra la
+  tarjeta «Catálogo de reglas» con `R-ZONA-01`, `R-SIGNAL-01` y `R-DATA-01` y su descripción.
+- **CA-02.13 [RC-01]** Dado cualquier código de denegación del vigilante, cuando se consulta
+  `ruleForDecision`, entonces devuelve exactamente una regla; para `AUTHORIZED`, `SAFE_STOP_ACTIVE` y
+  `BUSY` devuelve `null`.
 
 ---
 
@@ -241,7 +325,8 @@ Cada escenario produce una prueba en Fase VERIFICAR.
 
 ## 8. Fuera de alcance
 
-- Autenticación y autorización (se trata en otra HU/spec).
+- Autenticación y autorización (se trata en otra HU/spec). **[RC-01]** Ver pregunta abierta Q-A.
+- **[RC-01]** Interfaz para consultar el historial de cambios de zona (solo API en este refuerzo).
 - Formas de zona no rectangulares (polígonos, círculos).
 - Trayectorias curvas (solo segmentos rectos).
 
@@ -264,3 +349,35 @@ HU-01, HU-02
 ## 10. Compuerta Fase 1 (ENTENDER)
 
 - [ ] El humano aprueba explícitamente este `requirements.md` antes de pasar a DISEÑAR.
+- [ ] **[RC-01]** El humano aprueba el refuerzo RC-01 (RF-05, RF-06, CA-02.9–CA-02.13, rótulo de HU).
+
+---
+
+## 11. Preguntas abiertas [RC-01]
+
+### Q-A — Autenticación del operador
+El backlog del prototipo pide «configuraciones válidas **y autorizadas**» (HU-02) y «solo el operador
+autorizado puede consultarla» (HU-05); el stack de CLAUDE.md incluye bcrypt + JWT en cookie HttpOnly.
+Hoy queda fuera de alcance. **Propuesta, si el humano lo decide** (no se implementa en RC-01):
+- Requisito transversal **RF-07** en esta spec (es la primera del sistema y define el plano y la
+  política): un único rol «operador»; `POST /api/auth/login` (usuario/contraseña con hash bcrypt,
+  credenciales iniciales por variable de entorno, nunca en el código) que emite un JWT en cookie
+  `HttpOnly`, `Secure`, `SameSite=Strict`; `POST /api/auth/logout`.
+- Todas las rutas que **modifican** estado (`POST/PUT/DELETE /api/zones`, y las de las specs 002 y
+  003) y las de consulta de auditoría (`/api/zones/changes`, `/api/incidents`) exigen sesión válida →
+  `401 UNAUTHENTICATED`; las de lectura del plano pueden quedar públicas.
+- El registro de cambios (RF-05) añadiría la columna `actor` con el operador que hizo el cambio.
+- Requeriría su propia ronda de diseño, pruebas y revisión de seguridad.
+
+### Q-C — Aprobación formal de esta spec
+Esta spec está **implementada y probada** (tareas 1–27) pero sigue en «Borrador», contra el art. XII
+(ninguna HU avanza sin spec aprobada). Se pide al humano aprobar de forma explícita `requirements.md`
+y `design.md` (incluido RC-01) para regularizarla.
+
+---
+
+## 12. Registro de cambios
+
+| Cambio | Fecha | Estado | Resumen |
+|--------|-------|--------|---------|
+| RC-01 — Refuerzo de convergencia con el prototipo | 2026-11-22 | Propuesto, pendiente de aprobación | Rótulo de HU alineado con el backlog del prototipo sin renumerar; **RF-05** registro de cambios de zona (append-only, misma transacción, `GET /api/zones/changes`); **RF-06** catálogo de reglas `RULES` + `ruleForDecision` + tarjeta en la UI; RNF-06; CA-02.9–CA-02.13; preguntas Q-A (autenticación) y Q-C (aprobación). Contrato común con las specs 002 y 003 (D6 y catálogo de reglas). |

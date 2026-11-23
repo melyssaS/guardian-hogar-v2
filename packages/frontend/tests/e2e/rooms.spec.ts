@@ -7,7 +7,7 @@ const zoneShape = (page: Page, name: string) =>
   page.getByTestId('floor-plan').locator('g[data-state]', { hasText: name });
 
 test('HU-01: plano con cuadrícula y las 5 habitaciones del prototipo', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/#/zonas');
   const plan = page.getByTestId('floor-plan');
   await expect(plan).toHaveAttribute('viewBox', '0 0 1000 800');
   await expect(page.getByTestId('grid').locator('line')).toHaveCount(20);
@@ -27,7 +27,7 @@ test('HU-01: plano con cuadrícula y las 5 habitaciones del prototipo', async ({
 test('HU-02: el switch restringe y permite una habitación como en el prototipo', async ({
   page,
 }) => {
-  await page.goto('/');
+  await page.goto('/#/zonas');
   await page.getByRole('button', { name: 'Restringir Pasillo' }).click();
   await expect(zoneShape(page, 'Pasillo')).toHaveAttribute('data-state', 'restricted');
   await expect(page.getByTestId('restricted-count')).toHaveText('3 restringidas');
@@ -43,7 +43,7 @@ test('HU-02: el switch restringe y permite una habitación como en el prototipo'
 });
 
 test('HU-02: crear una zona, verla destacada y eliminarla', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/#/zonas');
   const form = page.getByRole('form', { name: 'Nueva zona' });
   await form.getByLabel('Nombre').fill('Estudio');
   await form.getByLabel('X').fill('600');
@@ -63,7 +63,7 @@ test('HU-02: crear una zona, verla destacada y eliminarla', async ({ page }) => 
 });
 
 test('CA-02.2: el servidor rechaza un nombre duplicado y se muestra el error', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/#/zonas');
   const form = page.getByRole('form', { name: 'Nueva zona' });
   await form.getByLabel('Nombre').fill('Sala');
   await form.getByRole('button', { name: 'Crear zona' }).click();

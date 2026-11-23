@@ -3,14 +3,11 @@ import type {
   IncidentDetail,
   MoveCommand,
   MoveResponse,
-  MoveResult,
-  Point,
   PositionReading,
   PositionResponse,
   RecoverResponse,
   Robot,
   RobotInput,
-  RobotSnapshot,
   RobotStatus,
   SessionInfo,
   UpdateZoneBody,
@@ -27,7 +24,7 @@ export class ApiError extends Error {
     public readonly status: number,
     public readonly code: string,
     message: string,
-    /** Cuerpo JSON de la respuesta, si lo hubo (p. ej. el MoveResult de un 409). */
+    /** Cuerpo JSON de la respuesta, si lo hubo (p. ej. la decisión REJECTED de un 409). */
     public readonly body: unknown = null,
   ) {
     super(message);
@@ -76,37 +73,6 @@ export const zonesApi = {
 };
 
 export type ZonesApi = typeof zonesApi;
-
-function isMoveResult(value: unknown): value is MoveResult {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof (value as { decision?: unknown }).decision === 'string'
-  );
-}
-
-/** /api/simulation — spec 003 §5. */
-export const simulationApi = {
-  getRobot: () => request<RobotSnapshot>('/api/simulation/robot'),
-  /**
-   * Un 409 (DENIED_SAFE_STOP) es una decisión del vigilante con su MoveResult: se devuelve
-   * para mostrarla (DD-102). El resto de errores (422, red…) se propagan como ApiError.
-   */
-  move: async (destination: Point): Promise<MoveResult> => {
-    try {
-      return await request<MoveResult>('/api/simulation/move', {
-        method: 'POST',
-        body: JSON.stringify({ destination }),
-      });
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 409 && isMoveResult(err.body)) return err.body;
-      throw err;
-    }
-  },
-  reset: () => request<RobotSnapshot>('/api/simulation/reset', { method: 'POST' }),
-};
-
-export type SimulationApi = typeof simulationApi;
 
 function isMoveResponse(value: unknown): value is MoveResponse {
   return (

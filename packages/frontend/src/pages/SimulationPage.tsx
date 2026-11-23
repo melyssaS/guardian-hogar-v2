@@ -8,29 +8,14 @@ import {
 } from '../components/CoordInput';
 import { DecisionPanel } from '../components/DecisionPanel';
 import { FloorPlan } from '../components/FloorPlan';
+import { QUALITY_PILL, STATE_PILL } from '../components/pills';
 import { Toast } from '../components/Toast';
 import { useRobot } from '../hooks/useRobot';
 import { useRobots } from '../hooks/useRobots';
 import { useZones } from '../hooks/useZones';
-import type { PositionQuality, RobotStateName } from '../types';
 
 /** Robot de la semilla (A1) seleccionado por defecto. */
 const DEFAULT_ROBOT_ID = 1;
-
-/** Colores por estado y calidad: los que devuelve la API, sin deducirlos (RF-04.6). */
-const STATE_PILL: Record<RobotStateName, string> = {
-  IDLE: 'pill success',
-  MOVING: 'pill blue',
-  SAFE_STOP: 'pill danger',
-  DEGRADED: 'pill gray',
-  RECOVERING: 'pill warn',
-};
-
-const QUALITY_PILL: Record<PositionQuality, string> = {
-  RELIABLE: 'pill success',
-  UNRELIABLE: 'pill warn',
-  MISSING: 'pill danger',
-};
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 

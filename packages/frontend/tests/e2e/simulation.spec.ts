@@ -15,7 +15,7 @@ async function typeDestination(page: Page, x: number, y: number) {
 test('CA-03.1 destino libre por coordenadas → AUTHORIZED y el robot cambia de posición', async ({
   page,
 }) => {
-  await page.goto('/#/simulacion');
+  await page.goto('/#/supervision');
   const robot = page.getByTestId('robot-1');
   await expect(robot).toHaveAttribute('data-x', '120');
 
@@ -38,7 +38,7 @@ test('CA-03.1 destino libre por coordenadas → AUTHORIZED y el robot cambia de 
 test('CA-03.2 / CA-03.4 clic en zona → parada preventiva; denegación; liberar parada → IDLE', async ({
   page,
 }) => {
-  await page.goto('/#/simulacion');
+  await page.goto('/#/supervision');
   await expect(page.getByTestId('robot-1')).toHaveAttribute('data-state', 'IDLE');
 
   // Clic en el plano sobre las Escaleras: fija el destino (RF-01.1).

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clientToFloor } from '../../src/components/FloorPlan';
 import { SimulationPage } from '../../src/pages/SimulationPage';
 import type {
+  Incident,
   MoveResponse,
   PositionQuality,
   RecoverResponse,
@@ -50,6 +51,12 @@ interface BackendOptions {
   recover?: { body: unknown; status?: number; next?: { state: RobotStateName } };
   position?: { body: unknown; status?: number };
   robots?: Robot[];
+  zones?: Zone[];
+  /** Las zonas nunca responden: simula la carga en curso. */
+  zonesPending?: boolean;
+  /** La lectura de zonas falla (500). */
+  zonesFail?: boolean;
+  incidents?: Incident[];
 }
 
 /**
@@ -58,6 +65,7 @@ interface BackendOptions {
  */
 function fakeBackend(options: BackendOptions = {}) {
   const calls: Call[] = [];
+  const incidents = [...(options.incidents ?? [])];
   const robots = (
     options.robots ?? [
       seedRobot({}),
@@ -77,7 +85,12 @@ function fakeBackend(options: BackendOptions = {}) {
 
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     const body: unknown = init?.body ? JSON.parse(String(init.body)) : null;
-    if (url.startsWith('/api/zones')) return json([stairs]);
+    if (url.startsWith('/api/zones')) {
+      if (options.zonesPending) return new Promise<Response>(() => undefined);
+      if (options.zonesFail) return json({ code: 'INTERNAL', message: 'fallo de zonas' }, 500);
+      return json(options.zones ?? [stairs]);
+    }
+    if (url.startsWith('/api/incidents')) return json(incidents);
     if (url === '/api/robots') return json(robots);
     const m = /^\/api\/robots\/(\d+)\/(state|sessions|move|recover|position)$/.exec(url);
     if (!m) return json({ code: 'NOT_FOUND', message: 'x' }, 404);
@@ -123,7 +136,7 @@ function fakeBackend(options: BackendOptions = {}) {
       }
     }
   });
-  return { fetchMock, calls, robots };
+  return { fetchMock, calls, robots, incidents };
 }
 
 const authorized = (position = { x: 450, y: 120 }): MoveResponse => ({
@@ -500,6 +513,246 @@ describe('SimulationPage', () => {
       ),
     );
     window.location.hash = '';
+  });
+
+  describe('indicadores de Supervisión (RF-10.3)', () => {
+    const incident = (id: number, rule: Incident['rule']): Incident => ({
+      id,
+      robotId: 1,
+      robotName: 'Aspiradora A1',
+      rule,
+      zoneName: null,
+      decisionCode: rule === 'R-SIGNAL-01' ? 'POSITION_QUALITY_LOST' : 'RESTRICTED_ZONE_VIOLATION',
+      collisionType: null,
+      stateAfter: 'SAFE_STOP',
+      origin: HOME,
+      destination: HOME,
+      reason: 'x',
+      createdAt: '2025-01-01T00:00:00.000Z',
+    });
+    const sala: Zone = { ...stairs, id: 1, name: 'Sala', active: false };
+    const kpi = (name: string) => screen.getByTestId(`kpi-${name}`);
+
+    it('CA-03.33 "Decisiones de parada" cuenta R-ZONA-01/R-DATA-01 y "Pérdidas de señal" R-SIGNAL-01', async () => {
+      install({
+        incidents: [
+          incident(1, 'R-ZONA-01'),
+          incident(2, 'R-SIGNAL-01'),
+          incident(3, 'R-DATA-01'),
+          incident(4, 'R-ZONA-01'),
+        ],
+      });
+      render(<SimulationPage />);
+      await waitFor(() => expect(kpi('stops')).toHaveTextContent('3'));
+      expect(kpi('signals')).toHaveTextContent('1');
+      expect(screen.getByText('Decisiones de parada')).toBeInTheDocument();
+      expect(screen.getByText('Pérdidas de señal')).toBeInTheDocument();
+    });
+
+    it('CA-03.33 un R-ZONA-01 y un R-SIGNAL-01 dan 1 y 1', async () => {
+      install({ incidents: [incident(1, 'R-ZONA-01'), incident(2, 'R-SIGNAL-01')] });
+      render(<SimulationPage />);
+      await waitFor(() => expect(kpi('stops')).toHaveTextContent('1'));
+      expect(kpi('signals')).toHaveTextContent('1');
+    });
+
+    it('sin incidentes ambos indicadores muestran 0', async () => {
+      install({});
+      render(<SimulationPage />);
+      await ready();
+      expect(kpi('stops')).toHaveTextContent('0');
+      expect(kpi('signals')).toHaveTextContent('0');
+    });
+
+    it('"Robots activos" cuenta los robots cuyo estado no es SAFE_STOP ni DEGRADED', async () => {
+      install({
+        robots: [
+          seedRobot({}),
+          seedRobot({ id: 2, name: 'V2', type: 'GUARD', state: 'MOVING' }),
+          seedRobot({ id: 3, name: 'C3', state: 'SAFE_STOP' }),
+          seedRobot({ id: 4, name: 'D4', state: 'DEGRADED', positionQuality: 'MISSING' }),
+          seedRobot({ id: 5, name: 'R5', state: 'RECOVERING' }),
+        ],
+      });
+      render(<SimulationPage />);
+      await waitFor(() => expect(kpi('active')).toHaveTextContent('3'));
+    });
+
+    it('"Zonas restringidas" cuenta las zonas activas que devuelve la API', async () => {
+      install({ zones: [stairs, sala, { ...stairs, id: 4, name: 'Cuarto del bebé' }] });
+      render(<SimulationPage />);
+      await waitFor(() => expect(kpi('zones')).toHaveTextContent('2'));
+    });
+
+    it('CA-03.29 "Solicitudes procesadas" = lastRequest.sequence del robot seleccionado', async () => {
+      const lastRequest = {
+        sessionId: 's',
+        sequence: 3,
+        destination: HOME,
+        acceptedAt: '2025-01-01T00:00:00.000Z',
+      };
+      install({
+        robots: [
+          seedRobot({ lastRequest }),
+          seedRobot({ id: 2, name: 'Vigilante V2', type: 'GUARD', lastRequest: null }),
+        ],
+      });
+      render(<SimulationPage />);
+      await waitFor(() => expect(kpi('requests')).toHaveTextContent('3'));
+      await userEvent.selectOptions(screen.getByLabelText('Elegir robot'), '2');
+      await waitFor(() => expect(kpi('requests')).toHaveTextContent('0'));
+    });
+
+    it('CA-03.29 con lastRequest = null muestra 0', async () => {
+      install({});
+      render(<SimulationPage />);
+      await ready();
+      expect(kpi('requests')).toHaveTextContent('0');
+    });
+
+    it('tras una decisión DENIED los indicadores se vuelven a pedir a la API', async () => {
+      install({ move: { body: denied } });
+      render(<SimulationPage />);
+      await ready();
+      expect(kpi('stops')).toHaveTextContent('0');
+      // El vigilante crea el incidente al decidir; la UI debe volver a pedirlo.
+      backend.incidents.push(incident(5, 'R-ZONA-01'));
+      await typeDestination('100', '300');
+      await submit();
+      await waitFor(() => expect(kpi('stops')).toHaveTextContent('1'));
+    });
+  });
+
+  describe('"⚠ Enviar a escaleras" (RF-10.4, DD-115)', () => {
+    const stairsButton = () => screen.getByRole('button', { name: /Enviar a escaleras/ });
+
+    it('con la zona activa envía al vigilante el centro de la zona leída de la API y muestra su decisión', async () => {
+      install({ move: { body: denied } });
+      render(<SimulationPage />);
+      await ready();
+      await userEvent.click(stairsButton());
+      // Centro de (29, 226, 160×178) = (109, 315): sale de la zona, no de una constante.
+      const sent = await waitFor(() => {
+        const call = backend.calls.find((c) => c.path === '/api/robots/1/move');
+        expect(call).toBeDefined();
+        return call;
+      });
+      expect(sent?.body).toEqual({
+        destination: { x: 109, y: 315 },
+        sessionId: 'session-1',
+        sequence: 1,
+      });
+      expect(await screen.findByTestId('preventive-stop')).toHaveTextContent('Escaleras');
+    });
+
+    it('usa el centro de la zona leída aunque la geometría cambie (no acopla la UI al seed)', async () => {
+      install({
+        move: { body: denied },
+        zones: [{ ...stairs, x: 200, y: 100, width: 100, height: 60 }],
+      });
+      render(<SimulationPage />);
+      await ready();
+      await userEvent.click(stairsButton());
+      await waitFor(() =>
+        expect(backend.calls.find((c) => c.path === '/api/robots/1/move')?.body).toMatchObject({
+          destination: { x: 250, y: 130 },
+        }),
+      );
+    });
+
+    it('aplica al robot seleccionado', async () => {
+      install({ move: { body: { ...denied, robotId: 2 } } });
+      render(<SimulationPage />);
+      await ready();
+      await userEvent.selectOptions(screen.getByLabelText('Elegir robot'), '2');
+      await waitFor(() =>
+        expect(screen.getByTestId('robot-position')).toHaveTextContent('(488, 290)'),
+      );
+      await userEvent.click(stairsButton());
+      await waitFor(() =>
+        expect(backend.calls.some((c) => c.path === '/api/robots/2/move')).toBe(true),
+      );
+      expect(backend.calls.some((c) => c.path === '/api/robots/1/move')).toBe(false);
+    });
+
+    it('con la zona inactiva avisa y no envía ningún movimiento', async () => {
+      install({ move: { body: denied }, zones: [{ ...stairs, active: false }] });
+      render(<SimulationPage />);
+      await ready();
+      await userEvent.click(stairsButton());
+      expect(await screen.findByRole('status')).toHaveTextContent(
+        'Escaleras está permitida; restrínjala antes de probar la parada',
+      );
+      expect(backend.calls.some((c) => c.path.endsWith('/move'))).toBe(false);
+      expect(screen.queryByTestId('decision')).not.toBeInTheDocument();
+    });
+
+    it('con la zona inactiva el botón sigue habilitado (solo avisa)', async () => {
+      install({ move: { body: denied }, zones: [{ ...stairs, active: false }] });
+      render(<SimulationPage />);
+      await ready();
+      expect(stairsButton()).toBeEnabled();
+    });
+
+    it('si la zona "Escaleras" no existe deshabilita el botón, explica el motivo y no envía movimiento', async () => {
+      install({ move: { body: denied }, zones: [] });
+      render(<SimulationPage />);
+      await ready();
+      const button = stairsButton();
+      await waitFor(() => expect(button).toBeDisabled());
+      expect(button).toHaveAttribute('title', expect.stringContaining('Escaleras'));
+      expect(button.getAttribute('title')).toMatch(/Zonas y reglas/);
+      await userEvent.click(button);
+      expect(backend.calls.some((c) => c.path.endsWith('/move'))).toBe(false);
+    });
+
+    it('si la zona no existe avisa que no existe, no que está permitida', async () => {
+      install({ move: { body: denied }, zones: [] });
+      render(<SimulationPage />);
+      await ready();
+      await waitFor(() => expect(stairsButton()).toBeDisabled());
+      // El botón deshabilitado no admite clic: el aviso queda visible junto a él.
+      const notice = await screen.findByTestId('stairs-missing');
+      expect(notice).toHaveTextContent('No existe la zona «Escaleras»; créela en Zonas y reglas');
+      expect(notice).not.toHaveTextContent('está permitida');
+    });
+
+    it('si la lectura de zonas falló avisa del fallo (no "está permitida") y no envía movimiento', async () => {
+      install({ move: { body: denied }, zonesFail: true });
+      render(<SimulationPage />);
+      await ready();
+      await screen.findByText(/No se pudo cargar la simulación/);
+      await userEvent.click(stairsButton());
+      expect(await screen.findByRole('status')).toHaveTextContent(
+        'No se pudieron leer las zonas; reintente',
+      );
+      expect(screen.queryByText(/está permitida/)).not.toBeInTheDocument();
+      expect(backend.calls.some((c) => c.path.endsWith('/move'))).toBe(false);
+    });
+
+    it('mientras las zonas cargan el botón no queda deshabilitado por error', async () => {
+      install({ move: { body: denied }, zonesPending: true });
+      render(<SimulationPage />);
+      await ready();
+      expect(stairsButton()).toBeEnabled();
+    });
+  });
+
+  describe('Telemetría (RF-08.7, CA-03.24)', () => {
+    it('muestra el JSON de la solicitud enviada y de la respuesta recibida, idénticos a la API', async () => {
+      install({ move: { body: denied } });
+      render(<SimulationPage />);
+      await ready();
+      expect(screen.getByText('Esperando una solicitud…')).toBeInTheDocument();
+      await typeDestination('100', '300');
+      await submit();
+      const req = await screen.findByTestId('telemetry-request');
+      const sent = backend.calls.find((c) => c.path === '/api/robots/1/move')?.body;
+      expect(JSON.parse(req.textContent ?? '')).toEqual(sent);
+      expect(JSON.parse(screen.getByTestId('telemetry-response').textContent ?? '')).toEqual(
+        denied,
+      );
+    });
   });
 
   it('RF-04.5 muestra el error si la API falla', async () => {

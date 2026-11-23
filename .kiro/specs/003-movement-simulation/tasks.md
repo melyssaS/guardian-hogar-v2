@@ -337,6 +337,7 @@ I-2 (orden de migraciones) e I-8 (pruebas afectadas por archivo) del informe del
   - _Requisitos: RF-07.8, RF-10.1_; **[RC-01 rev4]** ruta por defecto `#/supervision` (CA-03.37, DD-134)
   - **[RC-01 rev5] (N4-1)** _Pruebas: adapta `frontend/tests/e2e/simulation.spec.ts` a las rutas nuevas (`#/supervision`, ya no `#/simulacion`) y a la barra de 4 entradas, para que el E2E siga en verde al cerrar el par. Los casos nuevos son de RC-22_
   - **[RC-01 rev6] (N5-1)** _Pruebas: adapta también `frontend/tests/e2e/rooms.spec.ts` (`page.goto('/')` → `page.goto('/#/zonas')` en sus 4 pruebas): la ruta por defecto pasa a `#/supervision` (CA-03.37) y la vista de zonas deja de ser la inicial; sin este cambio el par no termina en verde. DD-139_
+  - **[RC-01 rev7]** (alineación 001↔003) La regla vale para **todo** E2E de `rooms.spec.ts`, también los que añade la 001 (RC-14, «Catálogo de reglas» e historial de `/api/zones/changes`): abren la vista con `page.goto('/#/zonas')`. Quien integre la rama de la 001 debe comprobarlo antes del merge.
 
 ### U1 · paso 5 — ~~Montaje, retirada y E2E~~ **[RC-01 rev6]** Retirada y E2E (misma entrega; el montaje es la 002 RC-17b)
 

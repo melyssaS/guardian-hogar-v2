@@ -33,7 +33,7 @@ packages/frontend/
 El frontend se ejecuta en contenedor para evitar instalar Node o npm en la máquina local. Dos modos:
 
 - **Demo/prod (imagen compilada)** — `packages/frontend/Dockerfile` multi-stage:
-  - `build`: `node:20-slim`, compila `@home-guardian/domain` y ejecuta `vite build`.
+  - `build`: `node:24-slim`, compila `@home-guardian/domain` y ejecuta `vite build`.
   - `runtime`: `nginx:alpine` sirviendo los estáticos, con `try_files` para rutas SPA y proxy `/api` hacia el backend.
 - **Desarrollo (hot reload)** — no usa el Dockerfile de nginx: el override `docker-compose.dev.yml` corre `vite dev --host` en el puerto 5173 con el código montado como bind mount.
 - **Orquestación** con `docker-compose.yml` (base) y `docker-compose.dev.yml` (override con hot reload). Usar un volumen anónimo sobre `node_modules` para que el bind mount del host no lo pise.

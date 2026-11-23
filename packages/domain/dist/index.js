@@ -1,3 +1,4 @@
+export { pointSchema, moveRequestSchema } from './schemas/simulation.schema.js';
 export { FLOOR_WIDTH, FLOOR_HEIGHT, ROBOT_RADIUS, SAFETY_MARGIN, COLLISION_PAD, envNumber, } from './geometry/constants.js';
 export { expandZone, pointInAABB } from './geometry/aabb.js';
 export { segmentIntersectsAABB, isCollision } from './geometry/collision.js';

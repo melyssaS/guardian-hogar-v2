@@ -3,7 +3,7 @@
 ## Fase MADA que aplica: CONSTRUIR y VERIFICAR
 
 ## Stack obligatorio
-- Node.js 20
+- Node.js 24
 - TypeScript 5
 - Express 4
 - Prisma ORM + SQLite (dev) / PostgreSQL (CI y producción)
@@ -36,7 +36,7 @@ packages/backend/
 ├── tests/
 │   ├── unit/
 │   └── integration/
-├── Dockerfile          multi-stage: deps → build → runtime Node 20
+├── Dockerfile          multi-stage: deps → build → runtime Node 24
 ├── tsconfig.json
 └── package.json
 ```
@@ -45,7 +45,7 @@ packages/backend/
 El backend se ejecuta en contenedor para evitar instalar Node, npm o Prisma en la máquina local. Se usa tanto en desarrollo (hot reload) como en demo (imagen compilada).
 
 - **Dockerfile multi-stage** en `packages/backend/Dockerfile`:
-  - `deps`: `node:20-slim`, copia los `package.json` del root y de los tres workspaces, `npm ci`.
+  - `deps`: `node:24-slim`, copia los `package.json` del root y de los tres workspaces, `npm ci`.
   - `build`: compila `@home-guardian/domain` y `backend`, ejecuta `prisma generate`.
   - `runtime`: solo `dist` + dependencias de producción + Prisma Client. Incluir `openssl` (requerido por Prisma en imágenes slim).
 - **Base de datos SQLite en volumen nombrado** (ej. `guardian-db:/data`) con `DATABASE_URL=file:/data/dev.db`. Nunca dejar el archivo `.db` dentro del contenedor sin volumen — se perdería en cada rebuild.

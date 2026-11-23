@@ -42,7 +42,7 @@ packages/domain/
                       ▼
 ┌─────────────────────────────────────────────────────┐
 │                   BACKEND                           │
-│         Node.js 20 + TypeScript + Express           │
+│         Node.js 24 + TypeScript + Express           │
 │         http://localhost:3000 (dev)                 │
 │              Render (producción)                    │
 │                                                     │

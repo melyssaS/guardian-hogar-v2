@@ -1,4 +1,7 @@
 export type { Zone, ZoneInput, ZoneRect } from './models/zone.js';
+export type { RobotStateName, Decision, RobotSnapshot, MoveRequest, MoveResult, } from './models/robot.js';
+export { pointSchema, moveRequestSchema } from './schemas/simulation.schema.js';
+export type { MoveRequestBody } from './schemas/simulation.schema.js';
 export type { Point, Segment, AABB } from './geometry/types.js';
 export { FLOOR_WIDTH, FLOOR_HEIGHT, ROBOT_RADIUS, SAFETY_MARGIN, COLLISION_PAD, envNumber, } from './geometry/constants.js';
 export { expandZone, pointInAABB } from './geometry/aabb.js';

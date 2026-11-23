@@ -66,7 +66,7 @@ test('RC-14: catálogo de reglas visible y el historial registra los cambios de 
   page,
   request,
 }) => {
-  await page.goto('/');
+  await page.goto('/#/zonas');
 
   // La tarjeta «Catálogo de reglas» muestra R-ZONA-01 (RF-06.3, CA-02.12).
   const catalog = page.getByTestId('rule-R-ZONA-01');

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   CoordInput,
   emptyDraft,
@@ -17,6 +17,14 @@ import { useZones } from '../hooks/useZones';
 /** Robot de la semilla (A1) seleccionado por defecto. */
 const DEFAULT_ROBOT_ID = 1;
 
+/** Robot pedido en el hash (`#/supervision?robot=2`); sin parámetro válido, el de la semilla. */
+function requestedRobotId(): number {
+  const query = window.location.hash.split('?')[1] ?? '';
+  const raw = new URLSearchParams(query).get('robot');
+  const id = raw === null ? NaN : Number(raw);
+  return Number.isInteger(id) && id > 0 ? id : DEFAULT_ROBOT_ID;
+}
+
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 /**
@@ -26,7 +34,12 @@ const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 export function SimulationPage() {
   const { zones, status: zoneStatus } = useZones();
   const { robots, status: listStatus, refresh: refreshRobots } = useRobots();
-  const [selectedId, setSelectedId] = useState(DEFAULT_ROBOT_ID);
+  const [selectedId, setSelectedId] = useState(requestedRobotId);
+  // Si el id pedido no está en el catálogo, se cae al primer robot de la lista.
+  useEffect(() => {
+    const first = robots[0];
+    if (first && !robots.some((r) => r.id === selectedId)) setSelectedId(first.id);
+  }, [robots, selectedId]);
   const { robot, lastResult, status, move, recover, loseSignal, restoreSignal } =
     useRobot(selectedId);
   const [draft, setDraft] = useState<CoordDraft>(emptyDraft);

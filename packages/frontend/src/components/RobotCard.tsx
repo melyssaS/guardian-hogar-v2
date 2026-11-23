@@ -25,7 +25,7 @@ export function RobotCard({ robot }: RobotCardProps) {
           ({fmt(robot.position.x)}, {fmt(robot.position.y)})
         </b>
       </div>
-      <a className="card-link" href="#/supervision">
+      <a className="card-link" href={`#/supervision?robot=${robot.id}`}>
         Supervisar →
       </a>
     </div>

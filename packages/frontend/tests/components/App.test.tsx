@@ -20,6 +20,12 @@ describe('App', () => {
           positionQuality: 'RELIABLE',
           lastRequest: null,
         };
+        if (/^\/api\/robots\/\d+\/state$/.test(url) && url !== '/api/robots/1/state') {
+          return new Response(JSON.stringify({ code: 'ROBOT_NOT_FOUND', message: 'x' }), {
+            status: 404,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
         const body =
           url === '/api/robots/1/state'
             ? { robotId: 1, ...robot }
@@ -82,6 +88,18 @@ describe('App', () => {
     expect(screen.getByRole('link', { name: /Supervisión/ })).toHaveAttribute(
       'href',
       '#/supervision',
+    );
+  });
+
+  it('RC-19 #/supervision?robot=2 sigue siendo la vista Supervisión', async () => {
+    window.location.hash = '#/supervision?robot=2';
+    render(<App />);
+    expect(
+      await screen.findByRole('heading', { name: 'Simulación de movimiento' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Supervisión/ })).toHaveAttribute(
+      'aria-current',
+      'page',
     );
   });
 

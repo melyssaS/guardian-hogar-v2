@@ -40,7 +40,8 @@ export function RegisterRobotModal({
           El robot nace en la posición inicial del plano, en estado IDLE. El servidor valida el
           nombre y la posición inicial.
         </p>
-        <form onSubmit={(e) => void submit(e)}>
+        {/* noValidate: required/maxLength son solo ayuda de UX; la autoridad es el 422 de la API. */}
+        <form noValidate onSubmit={(e) => void submit(e)}>
           <label className="label" htmlFor="robot-name-input">
             Nombre del robot
           </label>
@@ -51,6 +52,8 @@ export function RegisterRobotModal({
             onChange={(e) => setName(e.target.value)}
             placeholder="Ej. Aspiradora del pasillo"
             autoFocus
+            required
+            maxLength={60}
           />
           <div style={{ height: 13 }} />
           <label className="label" htmlFor="robot-type-input">

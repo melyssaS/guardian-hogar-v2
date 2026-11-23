@@ -1,7 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 
 // Spec 003 — tarea 23 (HU-03), adaptada al vocabulario del vigilante en RC-15 (robot-<id>:
-// A1 es el robot seleccionado por defecto). Backend real con base `:memory:` sembrada: robot en (120, 90),
+// A1 es el robot seleccionado por defecto) y a la navegación de RC-19 (Supervisión vive en
+// la ruta `#/supervision`, que también es la vista por defecto). Backend real con base `:memory:` sembrada: robot en (120, 90),
 // Sala; Escaleras y Cuarto del bebé restringidas. Cada prueba deja el robot como lo encontró.
 
 const requestMove = (page: Page) =>

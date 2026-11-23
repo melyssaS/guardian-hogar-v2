@@ -20,7 +20,9 @@ const VIEWS = [
 type View = (typeof VIEWS)[number];
 
 function viewFromHash(hash: string): View {
-  return VIEWS.find((v) => v.hash === hash) ?? VIEWS[0];
+  // Se ignora el query del hash (p. ej. `#/supervision?robot=2`): solo elige la vista.
+  const path = hash.split('?')[0];
+  return VIEWS.find((v) => v.hash === path) ?? VIEWS[0];
 }
 
 /** Estructura del prototipo: barra lateral de navegación + vista activa. */

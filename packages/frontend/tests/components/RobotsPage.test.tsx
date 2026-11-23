@@ -80,6 +80,35 @@ describe('RobotsPage', () => {
     expect(within(cardV2).getByText('(488, 290)')).toBeInTheDocument();
   });
 
+  it('RC-19 "Supervisar" de cada tarjeta preselecciona su robot en Supervisión', async () => {
+    install();
+    render(<RobotsPage />);
+    const cardV2 = await screen.findByTestId('robot-card-2');
+    expect(within(cardV2).getByRole('link', { name: /Supervisar/ })).toHaveAttribute(
+      'href',
+      '#/supervision?robot=2',
+    );
+    expect(
+      within(screen.getByTestId('robot-card-1')).getByRole('link', { name: /Supervisar/ }),
+    ).toHaveAttribute('href', '#/supervision?robot=1');
+  });
+
+  it('el nombre del modal lleva required y maxLength 60, pero el servidor decide (CA-03.10)', async () => {
+    const { posts } = install({
+      register: { status: 422, body: { code: 'INVALID_ROBOT', message: 'Nombre inválido' } },
+    });
+    render(<RobotsPage />);
+    const dialog = await openModal();
+    const input = within(dialog).getByLabelText('Nombre del robot');
+    expect(input).toBeRequired();
+    expect(input).toHaveAttribute('maxlength', '60');
+
+    // Con el nombre vacío el envío llega igualmente a la API, que responde el 422.
+    await userEvent.click(within(dialog).getByRole('button', { name: /Registrar en simulación/ }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('INVALID_ROBOT');
+    expect(posts).toEqual([{ name: '', type: 'VACUUM' }]);
+  });
+
   it('CA-03.21 el modal ofrece nombre y tipo (Aspiradora/Vigilante)', async () => {
     install();
     render(<RobotsPage />);

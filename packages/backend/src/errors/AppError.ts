@@ -30,3 +30,6 @@ export const destinationOutOfBounds = () =>
 
 export const invalidDestination = (message: string) =>
   new AppError(422, 'INVALID_DESTINATION', message);
+
+// Spec 002 — payload inválido de /api/robot/position (design §7, mapeo decisión → HTTP)
+export const invalidPosition = (message: string) => new AppError(422, 'INVALID_POSITION', message);

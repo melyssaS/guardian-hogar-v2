@@ -3,8 +3,17 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import { errorHandler } from './middlewares/errorHandler.js';
+import { createAuditLogRepository } from './repositories/auditLogRepository.js';
+import { createIncidentRepository } from './repositories/incidentRepository.js';
+import { createMovementLogRepository } from './repositories/movementLogRepository.js';
+import { createRobotRepository } from './repositories/robotRepository.js';
 import { createZoneRepository } from './repositories/zoneRepository.js';
+import { createIncidentRoutes } from './routes/incidentRoutes.js';
+import { createRobotRoutes } from './routes/robotRoutes.js';
+import { createSimulationRoutes } from './routes/simulationRoutes.js';
 import { createZoneRoutes } from './routes/zoneRoutes.js';
+import { createGuardianService } from './services/guardianService.js';
+import { createMovementService } from './services/movementService.js';
 import { createZoneService } from './services/zoneService.js';
 /** Construye la app Express con sus dependencias inyectadas (permite `:memory:` en pruebas). */
 export function createApp(db, options = {}) {
@@ -28,8 +37,27 @@ export function createApp(db, options = {}) {
     app.get('/health', (_req, res) => {
         res.json({ status: 'ok' });
     });
-    const zoneService = createZoneService(createZoneRepository(db));
-    app.use('/api/zones', createZoneRoutes(zoneService));
+    const zoneRepository = createZoneRepository(db);
+    app.use('/api/zones', createZoneRoutes(createZoneService(zoneRepository)));
+    const movementService = createMovementService({
+        robots: createRobotRepository(db),
+        movementLog: createMovementLogRepository(db),
+        getActiveZones: () => zoneRepository.findAll('active'),
+        runInTransaction: (fn) => db.transaction(fn)(),
+    });
+    app.use('/api/simulation', createSimulationRoutes(movementService));
+    // HU-04/HU-05 — vigilante de seguridad (spec 002 §6, §8.1). Inyección manual de
+    // repositorios en el servicio (SOLID-D); comparte las zonas activas con el resto de la app.
+    const incidentRepository = createIncidentRepository(db);
+    const guardianService = createGuardianService({
+        robots: createRobotRepository(db),
+        incidents: incidentRepository,
+        audit: createAuditLogRepository(db),
+        getActiveZones: () => zoneRepository.findAll('active'),
+        runInTransaction: (fn) => db.transaction(fn)(),
+    });
+    app.use('/api/robot', createRobotRoutes(guardianService));
+    app.use('/api/incidents', createIncidentRoutes(incidentRepository));
     app.use('/api', (_req, res) => {
         res.status(404).json({ code: 'NOT_FOUND', message: 'Route not found' });
     });

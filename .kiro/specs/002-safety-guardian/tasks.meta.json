@@ -1,0 +1,464 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1. Añadir al dominio `RobotStateName`, `PositionQuality`, `DecisionCode`, `GuardianInput`, `GuardianDecision`, `PositionReading` en `@home-guardian/domain`": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311297
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398319870
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398399373
+      }
+    ],
+    "2. Añadir esquemas Zod `moveSchema` (destino) y `positionSchema` (lectura de posición) y exportarlos desde `index.ts`": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311324
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398402236
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398506426
+      }
+    ],
+    "3. (TDD, prueba roja primero) Implementar `rules/stateMachine.ts` con la tabla de transiciones, `completeMove` (MOVING → IDLE) y las prohibiciones P-1 (SAFE_STOP y DEGRADED → MOVING) y P-2 (datos no confiables → MOVING)": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311354
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398512880
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398676725
+      }
+    ],
+    "4. (TDD) Implementar `rules/guardian.ts` `evaluateMovement` con el orden estricto estado → UNRELIABLE → MISSING → repo caído → origen → destino → trayectoria → AUTHORIZED, reutilizando `isCollision` (spec 001)": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311378
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398514511
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398678326
+      }
+    ],
+    "5. Crear migraciones `create_incidents.sql` (append-only con `zones_snapshot`) y `create_audit_log.sql` (append-only para rechazos por estado)": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311395
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398684984
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398876535
+      }
+    ],
+    "6. Crear migración `add_position_quality.sql` (`ALTER TABLE robot_state ADD position_quality`) y sembrar el robot con estado `IDLE`, posición válida y `position_quality='RELIABLE'`": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311416
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398686832
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398878054
+      }
+    ],
+    "7. Implementar `incidentRepository` (solo inserción y listado)": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311434
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398687780
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398879404
+      }
+    ],
+    "8. Extender `robotRepository` para leer/actualizar estado, posición y `positionQuality`": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311456
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398688890
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398880520
+      }
+    ],
+    "9. Implementar `guardianService`: leer snapshot, cargar zonas (fallo → null), invocar `evaluateMovement`, aplicar transición; en AUTHORIZED actualizar posición al destino y completar `MOVING → IDLE` (persistir IDLE); registrar evaluación con snapshot de zonas": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311477
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398888922
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399146595
+      }
+    ],
+    "10. En `guardianService`, crear incidente solo en denegación que para; en rechazo por estado (`SAFE_STOP_ACTIVE`/`BUSY`) no crear incidente pero registrar el rechazo en el log de auditoría": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311495
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398890820
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399144689
+      }
+    ],
+    "11. Implementar recuperación (`recover`): exigir estado en parada, posición segura y `positionQuality=RELIABLE` → RECOVERING → IDLE; si no, rechazar sin efectos": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311514
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398892219
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399148447
+      }
+    ],
+    "12. Implementar `db/bootstrap.ts` (reinicio seguro ADR-10): arrancar con `positionQuality=RELIABLE` y estado `IDLE` (seed), degradar `MOVING` persistido → `SAFE_STOP`, y pasar a `MISSING`/`UNRELIABLE` solo ante señal de pérdida explícita": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311528
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398899030
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399152262
+      }
+    ],
+    "13. Implementar `robotController` (state, move, recover, position) mapeando decisión → HTTP (200 AUTHORIZED/DENIED, 409 REJECTED, 422 payload)": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311544
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399159754
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399280834
+      }
+    ],
+    "14. Implementar `incidentController` y `GET /api/incidents`": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311562
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398899672
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399153372
+      }
+    ],
+    "15. Crear `routes/robotRoutes.ts` (`/api/robot/state|move|recover|position`) y `routes/incidentRoutes.ts` (`/api/incidents`); montar en `app.ts` y ejecutar bootstrap al arrancar": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311578
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399284681
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399439767
+      }
+    ],
+    "16. Pruebas T-12 grupo A (9): destino dentro/fuera/borde → RESTRICTED_ZONE_VIOLATION / AUTHORIZED": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311596
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399446989
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399620887
+      }
+    ],
+    "17. Pruebas T-12 grupo B (5): trayectoria cruza/tangente/no cruza → TRAJECTORY_CROSSES_ZONE / AUTHORIZED": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311614
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399448831
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399622290
+      }
+    ],
+    "18. Pruebas T-12 grupo C (3): sin zonas activas → siempre AUTHORIZED": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311631
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399449779
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399623673
+      }
+    ],
+    "19. Pruebas T-12 grupo D (5): radio `r=10`; y grupo E (3): margen `m=5`": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311650
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399451205
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399625175
+      }
+    ],
+    "20. Pruebas T-12 grupo F (2): `UNRELIABLE` → INSUFFICIENT_DATA, `MISSING` → MISSING_POSITION; y grupo G (1): repositorio caído → ZONE_DATA_UNAVAILABLE": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311668
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399452819
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399626743
+      }
+    ],
+    "21. Pruebas unit de transiciones prohibidas (P-1 SAFE_STOP→MOVING; P-2 datos no confiables→MOVING) y origen en zona → ORIGIN_IN_RESTRICTED_ZONE": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311689
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399632519
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399814619
+      }
+    ],
+    "22. Pruebas unit del servicio: registro siempre, incidente solo en denegación, rechazo sin incidente, recover válido/ inválido, bootstrap ADR-10": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311714
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399634334
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399816545
+      }
+    ],
+    "23. Pruebas de integración (Supertest): `/api/robot/state|move|recover` (200/409/422) y `/api/incidents` (append-only)": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311733
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399822910
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795400020885
+      }
+    ],
+    "24. Calidad: ESLint + Prettier sin errores, cero `any`, sin secretos, T-12 verde sin frontend ni BD real, pipeline CI verde": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311751
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795400028164
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795400228632
+      }
+    ],
+    "25. Implementar el aporte de lectura de posición: `POST /api/robot/position` (valida `positionSchema`; fija posición y `positionQuality`), en controller/service/ruta": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311768
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398893526
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399441151
+      }
+    ],
+    "26. Prueba unit de vivacidad: dos movimientos válidos consecutivos ambos `AUTHORIZED` (sin `BUSY`), vía `completeMove`": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311793
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399635360
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399817804
+      }
+    ],
+    "27. Prueba de integración: tras una señal de pérdida explícita (`positionQuality=MISSING`), `POST /position` con `RELIABLE` habilita un `move` `AUTHORIZED` a destino libre": [
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795398311809
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795399824203
+      },
+      {
+        "executionId": "cb62496e-527b-4056-8d6f-83640bf11ad7",
+        "chatSessionId": "sess_28d27f69-07aa-4579-8e78-1def55b06ca2",
+        "timestamp": 1795400022228
+      }
+    ]
+  }
+}

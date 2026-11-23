@@ -1,5 +1,6 @@
 export type { Zone, ZoneInput, ZoneRect } from './models/zone.js';
 export type { RobotStateName, Decision, RobotSnapshot, MoveRequest, MoveResult, } from './models/robot.js';
+export type { PositionQuality, DecisionCode, GuardianInput, GuardianDecision, PositionReading, } from './models/guardian.js';
 export { pointSchema, moveRequestSchema } from './schemas/simulation.schema.js';
 export type { MoveRequestBody } from './schemas/simulation.schema.js';
 export type { Point, Segment, AABB } from './geometry/types.js';
@@ -9,3 +10,5 @@ export { segmentIntersectsAABB, isCollision } from './geometry/collision.js';
 export type { CollisionType, CollisionResult } from './geometry/collision.js';
 export { zoneInputSchema, createZoneSchema, updateZoneSchema, listZoneQuerySchema, zoneIdParamSchema, } from './schemas/zone.schema.js';
 export type { CreateZoneBody, UpdateZoneBody, ListZoneQuery, ZoneActiveFilter, } from './schemas/zone.schema.js';
+export { moveSchema, positionSchema } from './schemas/robot.schema.js';
+export type { MoveBody, PositionBody } from './schemas/robot.schema.js';

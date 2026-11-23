@@ -6,6 +6,13 @@ export type {
   MoveRequest,
   MoveResult,
 } from './models/robot.js';
+export type {
+  PositionQuality,
+  DecisionCode,
+  GuardianInput,
+  GuardianDecision,
+  PositionReading,
+} from './models/guardian.js';
 export { pointSchema, moveRequestSchema } from './schemas/simulation.schema.js';
 export type { MoveRequestBody } from './schemas/simulation.schema.js';
 export type { Point, Segment, AABB } from './geometry/types.js';
@@ -33,3 +40,5 @@ export type {
   ListZoneQuery,
   ZoneActiveFilter,
 } from './schemas/zone.schema.js';
+export { moveSchema, positionSchema } from './schemas/robot.schema.js';
+export type { MoveBody, PositionBody } from './schemas/robot.schema.js';

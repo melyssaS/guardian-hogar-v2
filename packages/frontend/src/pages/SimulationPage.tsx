@@ -17,6 +17,8 @@ const STATE_PILL: Record<RobotStateName, string> = {
   IDLE: 'pill success',
   MOVING: 'pill blue',
   SAFE_STOP: 'pill danger',
+  DEGRADED: 'pill danger',
+  RECOVERING: 'pill warn',
 };
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));

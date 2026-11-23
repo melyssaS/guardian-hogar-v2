@@ -64,6 +64,8 @@ const STATE_LABEL: Record<RobotSnapshot['state'], string> = {
   IDLE: 'Robot · IDLE',
   MOVING: 'Robot · MOVING',
   SAFE_STOP: 'Robot · SAFE_STOP',
+  DEGRADED: 'Robot · DEGRADED',
+  RECOVERING: 'Robot · RECOVERING',
 };
 
 /** Robot con el aspecto del prototipo. La posición se anima con CSS (`.robot-marker`). */

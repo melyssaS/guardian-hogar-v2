@@ -35,7 +35,62 @@ describe('robotRepository (RF-02.1, DD-103)', () => {
     expect(() =>
       db.prepare("INSERT INTO robot_state (id, state) VALUES (2, 'IDLE')").run(),
     ).toThrow();
-    expect(() => db.prepare("UPDATE robot_state SET state = 'DEGRADED'").run()).toThrow();
+    // El CHECK se amplió en la spec 002 (migración 005) con DEGRADED/RECOVERING; un estado
+    // fuera del alcance sigue rechazándose.
+    expect(() => db.prepare("UPDATE robot_state SET state = 'TELEPORT'").run()).toThrow();
+  });
+});
+
+// Spec 002 — tarea 8: lectura/escritura de position_quality y snapshot completo (migración 005)
+describe('robotRepository positionQuality (spec 002, §4, R6)', () => {
+  let db: Db;
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  it('R6.1 el robot sembrado tiene positionQuality RELIABLE', () => {
+    const repo = createRobotRepository(db);
+    expect(repo.getPositionQuality()).toBe('RELIABLE');
+    expect(repo.getFull()).toEqual({
+      state: 'IDLE',
+      position: { x: 120, y: 90 },
+      positionQuality: 'RELIABLE',
+    });
+  });
+
+  it('setPositionQuality persiste la calidad sin tocar estado ni posición', () => {
+    const repo = createRobotRepository(db);
+    repo.setPositionQuality('MISSING');
+    expect(repo.getFull()).toEqual({
+      state: 'IDLE',
+      position: { x: 120, y: 90 },
+      positionQuality: 'MISSING',
+    });
+  });
+
+  it('saveFull persiste estado ampliado (DEGRADED), posición y calidad a la vez', () => {
+    const repo = createRobotRepository(db);
+    repo.saveFull({
+      state: 'DEGRADED',
+      position: { x: 55.5, y: 12 },
+      positionQuality: 'UNRELIABLE',
+    });
+    expect(repo.getFull()).toEqual({
+      state: 'DEGRADED',
+      position: { x: 55.5, y: 12 },
+      positionQuality: 'UNRELIABLE',
+    });
+  });
+
+  it('save (spec 003) conserva la positionQuality vigente', () => {
+    const repo = createRobotRepository(db);
+    repo.setPositionQuality('MISSING');
+    repo.save({ state: 'SAFE_STOP', position: { x: 300, y: 42 } });
+    expect(repo.getFull()).toEqual({
+      state: 'SAFE_STOP',
+      position: { x: 300, y: 42 },
+      positionQuality: 'MISSING',
+    });
   });
 });
 

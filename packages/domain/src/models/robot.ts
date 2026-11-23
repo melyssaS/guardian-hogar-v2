@@ -2,10 +2,15 @@ import type { CollisionType } from '../geometry/collision.js';
 import type { Point } from '../geometry/types.js';
 
 /**
- * Estados del robot en alcance de la HU-03 (spec 003 §2.1).
- * DEGRADED y RECOVERING quedan fuera: dependen de sensores (reservado).
+ * Estados de la máquina del robot.
+ * IDLE, MOVING y SAFE_STOP pertenecen a la HU-03 (spec 003 §2.1).
+ * DEGRADED y RECOVERING los añade el vigilante de seguridad (spec 002 §2.1):
+ * DEGRADED = operación limitada por calidad de datos insuficiente;
+ * RECOVERING = salida controlada de SAFE_STOP/DEGRADED hacia IDLE.
+ * Es una ampliación retrocompatible: los consumidores de la spec 003 solo producen y
+ * consumen los tres valores originales.
  */
-export type RobotStateName = 'IDLE' | 'MOVING' | 'SAFE_STOP';
+export type RobotStateName = 'IDLE' | 'MOVING' | 'SAFE_STOP' | 'DEGRADED' | 'RECOVERING';
 
 /** Decisión del vigilante (spec 003 §2.2). */
 export type Decision = 'ALLOW' | 'PREVENTIVE_STOP' | 'DENIED_SAFE_STOP';

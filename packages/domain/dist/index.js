@@ -3,4 +3,8 @@ export { FLOOR_WIDTH, FLOOR_HEIGHT, ROBOT_RADIUS, SAFETY_MARGIN, COLLISION_PAD, 
 export { expandZone, pointInAABB } from './geometry/aabb.js';
 export { segmentIntersectsAABB, isCollision } from './geometry/collision.js';
 export { zoneInputSchema, createZoneSchema, updateZoneSchema, listZoneQuerySchema, zoneIdParamSchema, } from './schemas/zone.schema.js';
-export { moveSchema, positionSchema } from './schemas/robot.schema.js';
+export { moveSchema, positionSchema, robotIdParamSchema } from './schemas/robot.schema.js';
+export { incidentIdParamSchema, incidentListQuerySchema } from './schemas/incident.schema.js';
+export { RULES, ruleForDecision } from './rules/catalog.js';
+export { robotInputSchema } from './schemas/robotCatalog.schema.js';
+export { moveCommandSchema } from './schemas/moveCommand.schema.js';

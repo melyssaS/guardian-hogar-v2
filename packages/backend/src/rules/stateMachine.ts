@@ -9,21 +9,22 @@ import type { GuardianDecision, PositionQuality, RobotStateName } from '@home-gu
  */
 
 /**
- * Tabla de transiciones permitidas por estado de origen (requirements §2.2).
+ * Lista blanca de transiciones persistibles T1–T9 por estado de origen (design §3).
+ * T9 (`∅ → IDLE`, alta) no tiene estado de origen y T10 (`MIGRATION_BASELINE`) la escribe la
+ * migración, por lo que ninguna pasa por `canTransition`. Cualquier otra pareja es un rechazo
+ * sin transición: el orden de evaluación del vigilante la hace inalcanzable.
  * La transición a `MOVING` queda sujeta además a P-1 y P-2 en `canTransition`.
  */
 const ALLOWED_TRANSITIONS: Readonly<Record<RobotStateName, readonly RobotStateName[]>> = {
-  // IDLE: mueve+AUTHORIZED → MOVING; denegación → SAFE_STOP; datos insuficientes → DEGRADED.
+  // T1 (AUTHORIZED) → MOVING; T3 (denegación) → SAFE_STOP; T4/T5 (datos) → DEGRADED.
   IDLE: ['MOVING', 'SAFE_STOP', 'DEGRADED'],
-  // MOVING: movimiento completado → IDLE; denegación / arranque persistido → SAFE_STOP;
-  //         datos insuficientes → DEGRADED. (mueve = BUSY: no cambia de estado.)
-  MOVING: ['IDLE', 'SAFE_STOP', 'DEGRADED'],
-  // SAFE_STOP: absorbe denegaciones y datos (self); única salida: recover → RECOVERING.
-  SAFE_STOP: ['SAFE_STOP', 'RECOVERING'],
-  // DEGRADED: denegación → SAFE_STOP; datos insuficientes (self); recover → RECOVERING.
-  DEGRADED: ['SAFE_STOP', 'DEGRADED', 'RECOVERING'],
-  // RECOVERING: denegación → SAFE_STOP; datos insuficientes → DEGRADED; recover → IDLE.
-  RECOVERING: ['SAFE_STOP', 'DEGRADED', 'IDLE'],
+  // T2 (movimiento completado) → IDLE; T8 (arranque con MOVING persistido) → SAFE_STOP.
+  MOVING: ['IDLE', 'SAFE_STOP'],
+  // T6: única salida es recover → RECOVERING.
+  SAFE_STOP: ['RECOVERING'],
+  DEGRADED: ['RECOVERING'],
+  // T7: recover completado → IDLE.
+  RECOVERING: ['IDLE'],
 };
 
 /**

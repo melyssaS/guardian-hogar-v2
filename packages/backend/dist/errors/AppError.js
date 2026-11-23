@@ -19,3 +19,5 @@ export const destinationOutOfBounds = () => new AppError(422, 'DESTINATION_OUT_O
 export const invalidDestination = (message) => new AppError(422, 'INVALID_DESTINATION', message);
 // Spec 002 — payload inválido de /api/robot/position (design §7, mapeo decisión → HTTP)
 export const invalidPosition = (message) => new AppError(422, 'INVALID_POSITION', message);
+// Spec 002/003 — robot inexistente (design §4, paso 1 del delta del servicio)
+export const robotNotFound = (id) => new AppError(404, 'ROBOT_NOT_FOUND', `Robot ${id} not found`);

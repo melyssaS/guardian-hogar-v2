@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { bootstrap } from '../../src/db/bootstrap.js';
 import { createRobotRepository } from '../../src/repositories/robotRepository.js';
+import { createTransitionLogRepository } from '../../src/repositories/transitionLogRepository.js';
 import { createTestDb } from '../helpers.js';
 
 describe('reinicio seguro del robot (ADR-10, R6)', () => {
@@ -68,5 +69,47 @@ describe('reinicio seguro del robot (ADR-10, R6)', () => {
       positionQuality: 'UNRELIABLE',
     });
     expect(afterSecond).toEqual(afterFirst);
+  });
+
+  // Spec 002 — RC-10 (R6.5, R9.4): T8 y arranque seguro de todos los robots.
+  it('registra T8 (BOOTSTRAP_MOVING_PERSISTED) al degradar un MOVING persistido', () => {
+    const db = createTestDb();
+    const robots = createRobotRepository(db);
+    robots.saveState(1, 'MOVING', { x: 42, y: 17 });
+
+    bootstrap(db);
+
+    const rows = createTransitionLogRepository(db)
+      .findByRobot(1)
+      .map((r) => [r.fromState, r.toState, r.cause]);
+    expect(rows).toEqual([
+      [null, 'IDLE', 'MIGRATION_BASELINE'],
+      ['MOVING', 'SAFE_STOP', 'BOOTSTRAP_MOVING_PERSISTED'],
+    ]);
+  });
+
+  it('con dos robots, solo el que tiene MOVING sembrado pasa a SAFE_STOP con T8', () => {
+    const db = createTestDb();
+    const robots = createRobotRepository(db);
+    const log = createTransitionLogRepository(db);
+    robots.saveState(2, 'MOVING', { x: 300, y: 300 });
+
+    bootstrap(db);
+
+    expect(robots.getStatus(1)?.state).toBe('IDLE');
+    expect(robots.getStatus(2)).toEqual({
+      robotId: 2,
+      state: 'SAFE_STOP',
+      position: { x: 300, y: 300 },
+      positionQuality: 'RELIABLE',
+    });
+    expect(log.findByRobot(1)).toHaveLength(1);
+    expect(log.findByRobot(2).map((r) => r.cause)).toEqual([
+      'MIGRATION_BASELINE',
+      'BOOTSTRAP_MOVING_PERSISTED',
+    ]);
+
+    bootstrap(db); // idempotente: no añade filas
+    expect(log.findByRobot(2)).toHaveLength(2);
   });
 });

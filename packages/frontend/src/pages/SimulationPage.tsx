@@ -9,16 +9,27 @@ import {
 import { DecisionPanel } from '../components/DecisionPanel';
 import { FloorPlan } from '../components/FloorPlan';
 import { Toast } from '../components/Toast';
-import { useSimulation } from '../hooks/useSimulation';
+import { useRobot } from '../hooks/useRobot';
+import { useRobots } from '../hooks/useRobots';
 import { useZones } from '../hooks/useZones';
-import type { RobotStateName } from '../types';
+import type { PositionQuality, RobotStateName } from '../types';
 
+/** Robot de la semilla (A1) seleccionado por defecto. */
+const DEFAULT_ROBOT_ID = 1;
+
+/** Colores por estado y calidad: los que devuelve la API, sin deducirlos (RF-04.6). */
 const STATE_PILL: Record<RobotStateName, string> = {
   IDLE: 'pill success',
   MOVING: 'pill blue',
   SAFE_STOP: 'pill danger',
-  DEGRADED: 'pill danger',
+  DEGRADED: 'pill gray',
   RECOVERING: 'pill warn',
+};
+
+const QUALITY_PILL: Record<PositionQuality, string> = {
+  RELIABLE: 'pill success',
+  UNRELIABLE: 'pill warn',
+  MISSING: 'pill danger',
 };
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
@@ -29,18 +40,41 @@ const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
  */
 export function SimulationPage() {
   const { zones, status: zoneStatus } = useZones();
-  const { robot, lastResult, status, move, reset } = useSimulation();
+  const { robots, status: listStatus, refresh: refreshRobots } = useRobots();
+  const [selectedId, setSelectedId] = useState(DEFAULT_ROBOT_ID);
+  const { robot, lastResult, status, move, recover, loseSignal, restoreSignal } =
+    useRobot(selectedId);
   const [draft, setDraft] = useState<CoordDraft>(emptyDraft);
   const [toast, setToast] = useState<{ text: string; seq: number } | null>(null);
   const notify = (text: string) => setToast((t) => ({ text, seq: (t?.seq ?? 0) + 1 }));
 
   const destination = parseDestination(draft).point;
-  const busy = status.move.loading || status.reset.loading;
-  const loadError = status.robot.error ?? zoneStatus.list.error;
-  const actionError = status.move.error ?? status.reset.error;
+  const busy = status.move.loading || status.recover.loading || status.signal.loading || !robot;
+  const loadError = status.robot.error ?? listStatus.list.error ?? zoneStatus.list.error;
+  const actionError = status.move.error ?? status.recover.error ?? status.signal.error;
 
-  const handleReset = async () => {
-    if (await reset()) notify('Parada liberada: robot en IDLE');
+  // El plano pinta todos los robots; el seleccionado usa el estado más reciente de la API.
+  const planRobots = robots.map((r) =>
+    r.id === selectedId && robot ? { ...r, state: robot.state, position: robot.position } : r,
+  );
+  const selected = robots.find((r) => r.id === selectedId);
+
+  /** Tras cada acción se vuelve a pedir la lista para que el plano refleje a todos los robots. */
+  const act = async <T,>(action: () => Promise<T>): Promise<T> => {
+    const result = await action();
+    await refreshRobots();
+    return result;
+  };
+
+  const handleRecover = async () => {
+    const result = await act(recover);
+    if (!result) return;
+    notify(result.transitioned ? 'Parada liberada: robot en IDLE' : 'El robot ya estaba en IDLE');
+  };
+
+  const chooseRobot = (id: number) => {
+    setSelectedId(id);
+    setDraft(emptyDraft);
   };
 
   return (
@@ -75,9 +109,9 @@ export function SimulationPage() {
               type="button"
               className="btn"
               disabled={busy}
-              onClick={() => void handleReset()}
+              onClick={() => void handleRecover()}
             >
-              ↻ Liberar parada (reset)
+              ↻ Liberar parada
             </button>
           </div>
         </div>
@@ -108,7 +142,8 @@ export function SimulationPage() {
               </div>
               <FloorPlan
                 zones={zones}
-                robot={robot}
+                robots={planRobots}
+                selectedRobotId={selectedId}
                 destination={destination}
                 onSelectPoint={(p) => setDraft(toDraft(p))}
               />
@@ -136,13 +171,31 @@ export function SimulationPage() {
               value={draft}
               onChange={setDraft}
               submitting={busy}
-              onSubmit={(p) => void move(p)}
+              onSubmit={(p) => void act(() => move(p))}
             />
             {/*
               Reservado (spec 003 §7, tarea 18): inyección de fallos de sensor, alerta A-04 y
               prueba T-18, junto con los estados DEGRADED/RECOVERING. Se desarrollan en vivo
               durante la demostración; aquí solo queda el punto de extensión deshabilitado.
             */}
+            <div className="controls">
+              <button
+                type="button"
+                className="btn tight"
+                disabled={busy}
+                onClick={() => void act(loseSignal)}
+              >
+                ⌁ Perder conexión
+              </button>
+              <button
+                type="button"
+                className="btn tight"
+                disabled={busy}
+                onClick={() => void act(restoreSignal)}
+              >
+                ↻ Recuperar señal
+              </button>
+            </div>
             <div className="controls reserved">
               <button
                 type="button"
@@ -162,13 +215,38 @@ export function SimulationPage() {
                   <h2 className="card-title">Robot simulado</h2>
                   <p className="card-sub">Estado y posición según el servidor</p>
                 </div>
-                <span className="pill">SIM-001</span>
+                <span className="pill">{selected?.name ?? `Robot ${selectedId}`}</span>
               </div>
+              <label className="label" htmlFor="robot-picker">
+                Elegir robot
+              </label>
+              <select
+                id="robot-picker"
+                className="field"
+                style={{ width: '100%', marginBottom: 15 }}
+                value={String(selectedId)}
+                onChange={(e) => chooseRobot(Number(e.target.value))}
+              >
+                {robots.length === 0 && <option value={selectedId}>Robot {selectedId}</option>}
+                {robots.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
               {robot ? (
                 <div className="info-grid">
                   <div className="info-tile">
                     <label>Estado</label>
                     <b>{robot.state}</b>
+                  </div>
+                  <div className="info-tile">
+                    <label>Calidad de posición</label>
+                    <b data-testid="robot-quality">
+                      <span className={QUALITY_PILL[robot.positionQuality]}>
+                        {robot.positionQuality}
+                      </span>
+                    </b>
                   </div>
                   <div className="info-tile">
                     <label>Posición</label>

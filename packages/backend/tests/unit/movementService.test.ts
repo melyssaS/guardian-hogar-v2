@@ -6,11 +6,8 @@ import { AppError } from '../../src/errors/AppError.js';
 import { createMovementLogRepository } from '../../src/repositories/movementLogRepository.js';
 import { createRobotRepository } from '../../src/repositories/robotRepository.js';
 import { createZoneRepository } from '../../src/repositories/zoneRepository.js';
-import {
-  assertDestinationWithinFloor,
-  createMovementService,
-  type MovementService,
-} from '../../src/services/movementService.js';
+import { assertDestinationWithinFloor } from '../../src/services/floorBounds.js';
+import { createMovementService, type MovementService } from '../../src/services/movementService.js';
 import { createTestDb, readMovementLog } from '../helpers.js';
 
 // Spec 003 — tarea 20. Habitaciones del prototipo; robot inicial en (120, 90), Sala.

@@ -1,5 +1,6 @@
 import type { CollisionType } from '../geometry/collision.js';
 import type { Point } from '../geometry/types.js';
+import type { PositionQuality } from './guardian.js';
 
 /**
  * Estados de la máquina del robot.
@@ -39,4 +40,47 @@ export interface MoveResult {
   /** Solo en DENIED_SAFE_STOP. */
   code?: 'SAFE_STOP_ACTIVE';
   reason: string;
+}
+
+/** Tipo de robot del catálogo (spec 003 RC-01). */
+export type RobotType = 'VACUUM' | 'GUARD';
+
+/** Última solicitud aceptada de la sesión vigente de un robot (spec 003, B-3). */
+export interface LastRequest {
+  sessionId: string;
+  sequence: number;
+  destination: Point;
+  /** Marca de tiempo ISO-8601. */
+  acceptedAt: string;
+}
+
+/** Robot del catálogo con su estado de seguridad actual (spec 003 RC-01). */
+export interface Robot {
+  id: number;
+  name: string;
+  type: RobotType;
+  /** Marca de tiempo ISO-8601. */
+  createdAt: string;
+  state: RobotStateName;
+  position: Point;
+  positionQuality: PositionQuality;
+  lastRequest: LastRequest | null;
+}
+
+/** Datos de alta de un robot; el cliente no envía estado ni posición. */
+export interface RobotInput {
+  name: string;
+  type: RobotType;
+}
+
+/** Comando de movimiento con sesión y secuencia (spec 003 R8). */
+export interface MoveCommand {
+  destination: Point;
+  sessionId: string;
+  sequence: number;
+}
+
+/** Sesión de envío de un robot. */
+export interface SessionInfo {
+  sessionId: string;
 }

@@ -20,5 +20,10 @@ export const positionSchema = z.object({
   quality: z.enum(['RELIABLE', 'UNRELIABLE', 'MISSING']),
 });
 
+/** Parámetro de ruta `:robotId` (entero positivo; la existencia la decide el servicio). */
+export const robotIdParamSchema = z.object({
+  robotId: z.coerce.number().int().positive(),
+});
+
 export type MoveBody = z.infer<typeof moveSchema>;
 export type PositionBody = z.infer<typeof positionSchema>;

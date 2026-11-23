@@ -146,9 +146,9 @@ graph TD
 > - **U2:** registro de cambios de zona (`013_create_zone_change_log.sql`), tarjeta de reglas,
 >   E2E y calidad (RC-3 a RC-16).
 
-- [ ] RC-1. `[U1 · paso 1]` **[RC-01 rev5] [par con RC-2]** (Prueba roja primero) Pruebas del catálogo de reglas: `RULES` contiene exactamente `R-ZONA-01`, `R-SIGNAL-01` y `R-DATA-01`; cada código de denegación de `DecisionCode` aparece en exactamente una regla; `ruleForDecision` devuelve la regla correcta y `null` para `AUTHORIZED`, `SAFE_STOP_ACTIVE` y `BUSY`; **[RC-01 rev2]** `ruleForDecision('POSITION_QUALITY_LOST')` devuelve `R-SIGNAL-01` (Q-B)
+- [x] RC-1. `[U1 · paso 1]` **[RC-01 rev5] [par con RC-2]** (Prueba roja primero) Pruebas del catálogo de reglas: `RULES` contiene exactamente `R-ZONA-01`, `R-SIGNAL-01` y `R-DATA-01`; cada código de denegación de `DecisionCode` aparece en exactamente una regla; `ruleForDecision` devuelve la regla correcta y `null` para `AUTHORIZED`, `SAFE_STOP_ACTIVE` y `BUSY`; **[RC-01 rev2]** `ruleForDecision('POSITION_QUALITY_LOST')` devuelve `R-SIGNAL-01` (Q-B)
   - _Requisitos: RF-06.1, RF-06.2, CA-02.13, Property 8_
-- [ ] RC-2. `[U1 · paso 1]` **[RC-01 rev5] [par con RC-1]** Implementar `domain/src/rules/catalog.ts` (`RuleId`, `Rule`, `RULES`, `ruleForDecision`) y exportarlo desde `index.ts`
+- [x] RC-2. `[U1 · paso 1]` **[RC-01 rev5] [par con RC-1]** Implementar `domain/src/rules/catalog.ts` (`RuleId`, `Rule`, `RULES`, `ruleForDecision`) y exportarlo desde `index.ts`
   - _Requisitos: RF-06.1, RF-06.2, DD-014_
   - **Dependencia entre specs:** debe estar integrada **antes** de la tarea de la spec 002 que añade `rule` a `incidents` (RC-01, D4).
   - **[RC-01 rev2] (I-5)** Única definición del sistema; la spec 002 la importa y no implementa otra.

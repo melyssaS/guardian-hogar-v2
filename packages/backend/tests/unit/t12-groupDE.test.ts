@@ -44,6 +44,7 @@ describe('evaluateMovement — T-12 Grupo D (radio r = 10, pad = 10)', () => {
       authorized: false,
       nextState: 'SAFE_STOP',
       collisionType: 'RESTRICTED_ZONE_VIOLATION',
+      zoneName: 'Escaleras',
       reason: expect.any(String),
     });
   });
@@ -76,6 +77,7 @@ describe('evaluateMovement — T-12 Grupo D (radio r = 10, pad = 10)', () => {
       authorized: false,
       nextState: 'SAFE_STOP',
       collisionType: 'TRAJECTORY_CROSSES_ZONE',
+      zoneName: 'Escaleras',
       reason: expect.any(String),
     });
   });
@@ -90,6 +92,7 @@ describe('evaluateMovement — T-12 Grupo D (radio r = 10, pad = 10)', () => {
       authorized: false,
       nextState: 'SAFE_STOP',
       collisionType: 'ORIGIN_IN_RESTRICTED_ZONE',
+      zoneName: 'Escaleras',
       reason: expect.any(String),
     });
   });
@@ -111,6 +114,7 @@ describe('evaluateMovement — T-12 Grupo E (margen m = 5, pad = 5)', () => {
       authorized: false,
       nextState: 'SAFE_STOP',
       collisionType: 'RESTRICTED_ZONE_VIOLATION',
+      zoneName: 'Escaleras',
       reason: expect.any(String),
     });
   });

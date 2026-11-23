@@ -195,6 +195,10 @@ svg {
   background: #e9f0ff;
   color: #3164ca;
 }
+.pill.gray {
+  background: #eceff3;
+  color: #6c7889;
+}
 
 .btn {
   display: inline-flex;

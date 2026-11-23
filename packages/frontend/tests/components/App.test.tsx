@@ -10,9 +10,22 @@ describe('App', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
-        const body = url.startsWith('/api/simulation/robot')
-          ? { state: 'IDLE', position: { x: 120, y: 90 } }
-          : [];
+        const robot = {
+          id: 1,
+          name: 'Aspiradora A1',
+          type: 'VACUUM',
+          createdAt: '2025-01-01T00:00:00.000Z',
+          state: 'IDLE',
+          position: { x: 120, y: 90 },
+          positionQuality: 'RELIABLE',
+          lastRequest: null,
+        };
+        const body =
+          url === '/api/robots/1/state'
+            ? { robotId: 1, ...robot }
+            : url === '/api/robots'
+              ? [robot]
+              : [];
         return new Response(JSON.stringify(body), {
           headers: { 'Content-Type': 'application/json' },
         });
@@ -38,6 +51,6 @@ describe('App', () => {
     expect(
       await screen.findByRole('heading', { name: 'Simulación de movimiento' }),
     ).toBeInTheDocument();
-    expect(await screen.findByTestId('robot')).toBeInTheDocument();
+    expect(await screen.findByTestId('robot-1')).toBeInTheDocument();
   });
 });

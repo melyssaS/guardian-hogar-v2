@@ -22,9 +22,12 @@ describe('012_create_robot_sessions.sql', () => {
     );
   });
 
-  it('no se aplica sobre una base que ya tiene aplicada una posterior (orden endurecido)', () => {
+  it('aplica 012 (y las posteriores) en orden sobre una base con 001-011 (orden endurecido)', () => {
     const db = createDbBefore('012');
-    expect(migrate(db)).toEqual(['012_create_robot_sessions.sql']);
+    // 012 es la primera pendiente; tras RC-01 también queda pendiente 013 (zone_change_log).
+    const applied = migrate(db);
+    expect(applied[0]).toBe('012_create_robot_sessions.sql');
+    expect(applied).toEqual([...applied].sort());
   });
 
   it('define el esquema único: una fila por robot, session_id UNIQUE, last_sequence 0 por defecto', () => {

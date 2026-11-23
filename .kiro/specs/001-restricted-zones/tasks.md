@@ -4,7 +4,7 @@
 **HU cubiertas:** HU-02 del backlog del prototipo; el plano («HU-01» en esta spec) es soporte de
 HU-02/HU-03 **[RC-01]**
 **Estado:** Tareas 1–27 implementadas (28 parcial); spec aprobada en lo implementado (2026-11-23);
-refuerzo RC-01 (incluidas la rev2 a la rev6) pendiente de aprobación humana **[RC-01 rev2]** **[RC-01 rev3]** **[RC-01 rev4]** **[RC-01 rev5]** **[RC-01 rev6]**
+refuerzo RC-01 implementado (RC-1 y RC-2 en U1; RC-3 a RC-16 en U2) **[RC-01 rev2]** **[RC-01 rev3]** **[RC-01 rev4]** **[RC-01 rev5]** **[RC-01 rev6]**
 (requiere `requirements.md` y `design.md` aprobados, incluido RC-01)
 
 ## Overview
@@ -152,33 +152,33 @@ graph TD
   - _Requisitos: RF-06.1, RF-06.2, DD-014_
   - **Dependencia entre specs:** debe estar integrada **antes** de la tarea de la spec 002 que añade `rule` a `incidents` (RC-01, D4).
   - **[RC-01 rev2] (I-5)** Única definición del sistema; la spec 002 la importa y no implementa otra.
-- [ ] RC-3. `[U2]` (Prueba roja primero) Pruebas de `classifyZoneUpdate`: solo `active` false→true = `ACTIVATE`; true→false = `DEACTIVATE`; otro campo (con o sin `active`) = `UPDATE`; sin cambios = `null`
+- [x] RC-3. `[U2]` (Prueba roja primero) Pruebas de `classifyZoneUpdate`: solo `active` false→true = `ACTIVATE`; true→false = `DEACTIVATE`; otro campo (con o sin `active`) = `UPDATE`; sin cambios = `null`
   - _Requisitos: RF-05.3, DD-013_
-- [ ] RC-4. `[U2]` Implementar `domain/src/models/zoneChange.ts` (`ZoneChangeAction`, `ZoneChange`, `classifyZoneUpdate`) y exportarlo
+- [x] RC-4. `[U2]` Implementar `domain/src/models/zoneChange.ts` (`ZoneChangeAction`, `ZoneChange`, `classifyZoneUpdate`) y exportarlo
   - _Requisitos: RF-05.1, RF-05.3_
-- [ ] RC-5. `[U2]` (Prueba roja primero) Prueba de migración: la tabla `zone_change_log` existe con sus `CHECK` (acción válida, `before` nulo en `CREATE`, `after` nulo en `DELETE`) y los triggers rechazan `UPDATE` y `DELETE`; actualizar la lista de migraciones esperadas en `migrate.test.ts`
+- [x] RC-5. `[U2]` (Prueba roja primero) Prueba de migración: la tabla `zone_change_log` existe con sus `CHECK` (acción válida, `before` nulo en `CREATE`, `after` nulo en `DELETE`) y los triggers rechazan `UPDATE` y `DELETE`; actualizar la lista de migraciones esperadas en `migrate.test.ts`
   - _Requisitos: RF-05.5, CA-02.11, RNF-06_
-- [ ] RC-6. `[U2]` Crear `migrations/013_create_zone_change_log.sql` (numeración fijada en la unificación RC-01: 007 y 012 son de la spec 003; 008–011, de la 002; **[RC-01 rev2]** 013 se entrega en U2, después de 007–012); sin filas retroactivas para las zonas existentes ni para la siembra
+- [x] RC-6. `[U2]` Crear `migrations/013_create_zone_change_log.sql` (numeración fijada en la unificación RC-01: 007 y 012 son de la spec 003; 008–011, de la 002; **[RC-01 rev2]** 013 se entrega en U2, después de 007–012); sin filas retroactivas para las zonas existentes ni para la siembra
   - _Requisitos: RF-05.4, RF-05.5, DD-010, DD-012_
-- [ ] RC-7. `[U2]` (Prueba roja primero) Implementar `repositories/zoneChangeLogRepository.ts` (`append`, `listAll` ordenado por `id DESC`) con SQL parametrizado y mapeo JSON ↔ `Zone`
+- [x] RC-7. `[U2]` (Prueba roja primero) Implementar `repositories/zoneChangeLogRepository.ts` (`append`, `listAll` ordenado por `id DESC`) con SQL parametrizado y mapeo JSON ↔ `Zone`
   - _Requisitos: RF-05.1, RF-05.6_
-- [ ] RC-8. `[U2]` (Prueba roja primero) Pruebas del servicio: una fila por `create`/`update`/`activate`/`deactivate`/`remove` con `before`/`after` correctos; sin fila en 404, 409, 422 y en un `PUT` sin cambios; atomicidad (si `append` falla, la zona no cambia)
+- [x] RC-8. `[U2]` (Prueba roja primero) Pruebas del servicio: una fila por `create`/`update`/`activate`/`deactivate`/`remove` con `before`/`after` correctos; sin fila en 404, 409, 422 y en un `PUT` sin cambios; atomicidad (si `append` falla, la zona no cambia)
   - _Requisitos: RF-05.1–RF-05.4, CA-02.9, CA-02.10, Property 7_
-- [ ] RC-9. `[U2]` Refactorizar `createZoneService` para recibir `{ zones, changes, runInTransaction }` (transacción `IMMEDIATE`) y registrar cada cambio; actualizar su construcción en `app.ts`, `seed.ts` (la siembra sigue usando el repositorio directamente y no genera filas) y en las pruebas existentes (`zoneService.test.ts`, `zones.api.test.ts`) sin cambiar su comportamiento
+- [x] RC-9. `[U2]` Refactorizar `createZoneService` para recibir `{ zones, changes, runInTransaction }` (transacción `IMMEDIATE`) y registrar cada cambio; actualizar su construcción en `app.ts`, `seed.ts` (la siembra sigue usando el repositorio directamente y no genera filas) y en las pruebas existentes (`zoneService.test.ts`, `zones.api.test.ts`) sin cambiar su comportamiento
   - _Requisitos: RF-05.2, DD-011_
-- [ ] RC-10. `[U2]` (Prueba roja primero) Prueba de integración (Supertest): la secuencia de CA-02.9 devuelve las 5 filas en orden; `GET /api/zones/changes` no se interpreta como `/:id`; un 409/422 no añade filas
+- [x] RC-10. `[U2]` (Prueba roja primero) Prueba de integración (Supertest): la secuencia de CA-02.9 devuelve las 5 filas en orden; `GET /api/zones/changes` no se interpreta como `/:id`; un 409/422 no añade filas
   - _Requisitos: RF-05.6, CA-02.9, CA-02.10_
-- [ ] RC-11. `[U2]` Añadir `listChanges` al servicio y al `zoneController`, y la ruta `GET /api/zones/changes` registrada antes de `/:id`
+- [x] RC-11. `[U2]` Añadir `listChanges` al servicio y al `zoneController`, y la ruta `GET /api/zones/changes` registrada antes de `/:id`
   - _Requisitos: RF-05.6, Contrato de API_
-- [ ] RC-12. `[U2]` (Prueba roja primero) Prueba RTL de `RulesCatalog`: muestra las tres reglas con id, título, descripción y HU, y la tarjeta «Fuera del MVP»; no hace llamadas HTTP
+- [x] RC-12. `[U2]` (Prueba roja primero) Prueba RTL de `RulesCatalog`: muestra las tres reglas con id, título, descripción y HU, y la tarjeta «Fuera del MVP»; no hace llamadas HTTP
   - _Requisitos: RF-06.3, CA-02.12_
-- [ ] RC-13. `[U2]` Crear `components/RulesCatalog.tsx` con el estilo del prototipo (`.rulecard`, `.rule-id`) e integrarlo en la columna lateral de `RoomsPage`
+- [x] RC-13. `[U2]` Crear `components/RulesCatalog.tsx` con el estilo del prototipo (`.rulecard`, `.rule-id`) e integrarlo en la columna lateral de `RoomsPage`
   - _Requisitos: RF-06.3, CA-02.12_
-- [ ] RC-14. `[U2]` E2E (Playwright): en «Zonas y reglas» se ve la tarjeta «Catálogo de reglas» con `R-ZONA-01`; tras restringir y permitir «Pasillo», `GET /api/zones/changes` contiene `DEACTIVATE`/`ACTIVATE` de esa zona (el E2E deja el estado como lo encontró)
+- [x] RC-14. `[U2]` E2E (Playwright): en «Zonas y reglas» se ve la tarjeta «Catálogo de reglas» con `R-ZONA-01`; tras restringir y permitir «Pasillo», `GET /api/zones/changes` contiene `DEACTIVATE`/`ACTIVATE` de esa zona (el E2E deja el estado como lo encontró)
   - _Requisitos: CA-02.9, CA-02.12_
-- [ ] RC-15. `[U2]` Calidad: lint, typecheck y Prettier del repo sin errores, cero `any`; documentar en Notes las decisiones Q-A/Q-C que tome el humano
+- [x] RC-15. `[U2]` Calidad: lint, typecheck y Prettier del repo sin errores, cero `any`; documentar en Notes las decisiones Q-A/Q-C que tome el humano
   - _Requisitos: RNF-02, RNF-06_
-- [ ] RC-16. `[U2]` **[RC-01 rev2]** (Prueba roja primero) En `migrate.test.ts`: con 001–012 aplicadas, `migrate` aplica `013_create_zone_change_log.sql` después de 007–012; y si una base ya tiene aplicada `013` y aparece pendiente una migración con número menor, el arranque falla con error claro (endurecimiento Q-G de `migrate.ts`, implementado en la spec 002)
+- [x] RC-16. `[U2]` **[RC-01 rev2]** (Prueba roja primero) En `migrate.test.ts`: con 001–012 aplicadas, `migrate` aplica `013_create_zone_change_log.sql` después de 007–012; y si una base ya tiene aplicada `013` y aparece pendiente una migración con número menor, el arranque falla con error claro (endurecimiento Q-G de `migrate.ts`, implementado en la spec 002)
   - _Requisitos: RF-05.5, RA-02, Q-G_
   - **Dependencia entre specs:** requiere el endurecimiento de `migrate.ts` de la spec 002 (U1); si aún no está, la segunda aserción queda en rojo hasta entonces dentro de la rama de U2.
 
@@ -232,6 +232,12 @@ graph TD
 - **[RC-01 rev2]** Q-A decidida: deuda documentada (riesgo RA-01 en `requirements.md` §11b). Q-C
   decidida: spec aprobada en lo implementado. M-1 decidida: `r = m = 0` por defecto.
 - **[RC-01 rev2] Unidades:** U1 = RC-1, RC-2. U2 = RC-3 a RC-16.
+- **RC-15 (decisiones de calidad implementadas):** Q-A quedó como deuda documentada (riesgo RA-01,
+  `requirements.md` §11b); Q-C aprobó la spec en lo implementado. En este bloque no se añadió
+  autenticación ni la columna `actor` a `zone_change_log`. Se verificó en local: `npm run typecheck`
+  y `npm run lint` sin errores, cero `any` en el código nuevo, y la suite completa en verde
+  (dominio, backend, frontend) más el E2E de `rooms.spec.ts`. El único aviso de `prettier --check`
+  (`.prettierrc.json`) es preexistente y ajeno a RC-01.
 
 > **[RC-01 rev5]** Unidad de «verde»: el par «prueba roja → implementación». RC-1 y RC-2 se ejecutan
 > seguidas y ocupan **una sola fila** de la tabla «Orden intercalado de U1» (002 tasks.md); la suite debe

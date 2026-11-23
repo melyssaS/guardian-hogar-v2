@@ -11,6 +11,7 @@ import { createRobotCatalogRepository } from './repositories/robotCatalogReposit
 import { createRobotRepository } from './repositories/robotRepository.js';
 import { createSessionRepository } from './repositories/sessionRepository.js';
 import { createTransitionLogRepository } from './repositories/transitionLogRepository.js';
+import { createZoneChangeLogRepository } from './repositories/zoneChangeLogRepository.js';
 import { createZoneRepository } from './repositories/zoneRepository.js';
 import { createGuardianRoutes } from './routes/guardianRoutes.js';
 import { createIncidentRoutes } from './routes/incidentRoutes.js';
@@ -61,7 +62,16 @@ export function createApp(db: Db, options: AppOptions = {}): Express {
   });
 
   const zoneRepository = createZoneRepository(db);
-  app.use('/api/zones', createZoneRoutes(createZoneService(zoneRepository)));
+  app.use(
+    '/api/zones',
+    createZoneRoutes(
+      createZoneService({
+        zones: zoneRepository,
+        changes: createZoneChangeLogRepository(db),
+        runInTransaction: (fn) => db.transaction(fn).immediate(),
+      }),
+    ),
+  );
 
   const movementService = createMovementService({
     robots: createRobotRepository(db),

@@ -16,6 +16,8 @@ export function createZoneRoutes(service: ZoneService): Router {
 
   router.get('/', validate(listZoneQuerySchema, 'query'), c.list);
   router.post('/', validate(createZoneSchema), c.create);
+  // RF-05.6: /changes se registra antes de /:id para que no se interprete como un id.
+  router.get('/changes', c.listChanges);
   router.get('/:id', validate(zoneIdParamSchema, 'params'), c.get);
   router.put('/:id', validate(zoneIdParamSchema, 'params'), validate(updateZoneSchema), c.update);
   router.delete('/:id', validate(zoneIdParamSchema, 'params'), c.remove);

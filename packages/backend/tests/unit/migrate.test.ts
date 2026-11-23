@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -24,6 +24,7 @@ describe('migrate (RF-04.2)', () => {
       'incidents',
       'audit_log',
       'robots',
+      'zone_change_log',
     ]) {
       expect(
         db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(table),
@@ -110,5 +111,38 @@ describe('migrate (RF-04.2)', () => {
     migrate(db, dir);
     writeFileSync(join(dir, '002_b.sql'), 'CREATE TABLE b (id INTEGER);');
     expect(migrate(db, dir)).toEqual(['002_b.sql']);
+  });
+
+  // Spec 001 — RC-16 (RF-05.5, RA-02, Q-G): 013 se entrega después de 007-012.
+  it('aplica 013_create_zone_change_log después de 007-012', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mig-'));
+    const earlier = ALL.filter((f) => f < '013_create_zone_change_log.sql');
+    for (const file of earlier) {
+      copyFileSync(join(MIGRATIONS_DIR, file), join(dir, file));
+    }
+    const db = createDatabase(':memory:');
+    migrate(db, dir);
+    // Con 001-012 aplicadas, 013 aparece como la única pendiente.
+    copyFileSync(
+      join(MIGRATIONS_DIR, '013_create_zone_change_log.sql'),
+      join(dir, '013_create_zone_change_log.sql'),
+    );
+    expect(migrate(db, dir)).toEqual(['013_create_zone_change_log.sql']);
+    expect(
+      db
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'zone_change_log'")
+        .get(),
+    ).toBeDefined();
+  });
+
+  // Q-G: si una base ya tiene 013 aplicada y aparece pendiente una migración con número menor,
+  // el arranque falla con un error claro.
+  it('rechaza una migración anterior cuando 013 ya está aplicada', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mig-'));
+    for (const file of ALL) copyFileSync(join(MIGRATIONS_DIR, file), join(dir, file));
+    const db = createDatabase(':memory:');
+    migrate(db, dir);
+    writeFileSync(join(dir, '012b_late.sql'), 'CREATE TABLE late (id INTEGER);');
+    expect(() => migrate(db, dir)).toThrow(/Out-of-order/);
   });
 });

@@ -62,6 +62,31 @@ test('HU-02: crear una zona, verla destacada y eliminarla', async ({ page }) => 
   await expect(page.getByTestId('restricted-count')).toHaveText('2 restringidas');
 });
 
+test('RC-14: catálogo de reglas visible y el historial registra los cambios de Pasillo', async ({
+  page,
+  request,
+}) => {
+  await page.goto('/');
+
+  // La tarjeta «Catálogo de reglas» muestra R-ZONA-01 (RF-06.3, CA-02.12).
+  const catalog = page.getByTestId('rule-R-ZONA-01');
+  await expect(catalog).toContainText('R-ZONA-01');
+
+  // Restringir y luego permitir «Pasillo» deja el estado como se encontró (inicialmente permitida).
+  await page.getByRole('button', { name: 'Restringir Pasillo' }).click(); // ACTIVATE
+  await expect(zoneShape(page, 'Pasillo')).toHaveAttribute('data-state', 'restricted');
+  await page.getByRole('button', { name: 'Permitir Pasillo' }).click(); // DEACTIVATE
+  await expect(zoneShape(page, 'Pasillo')).toHaveAttribute('data-state', 'allowed');
+
+  // El historial (API) contiene ACTIVATE y DEACTIVATE de esa zona (CA-02.9).
+  const res = await request.get('/api/zones/changes');
+  expect(res.ok()).toBeTruthy();
+  const changes = (await res.json()) as Array<{ action: string; before: { name: string } | null }>;
+  const actions = changes.filter((c) => c.before?.name === 'Pasillo').map((c) => c.action);
+  expect(actions).toContain('ACTIVATE');
+  expect(actions).toContain('DEACTIVATE');
+});
+
 test('CA-02.2: el servidor rechaza un nombre duplicado y se muestra el error', async ({ page }) => {
   await page.goto('/');
   const form = page.getByRole('form', { name: 'Nueva zona' });

@@ -1,4 +1,6 @@
 export type { Zone, ZoneInput, ZoneRect } from './models/zone.js';
+export { classifyZoneUpdate } from './models/zoneChange.js';
+export type { ZoneChange, ZoneChangeAction } from './models/zoneChange.js';
 export type {
   RobotStateName,
   Decision,

@@ -15,6 +15,9 @@ import {
   type PerRobotMoveOutcome,
 } from '../src/services/guardianService.js';
 import { createSessionService, type SessionService } from '../src/services/sessionService.js';
+import { createZoneChangeLogRepository } from '../src/repositories/zoneChangeLogRepository.js';
+import { createZoneRepository } from '../src/repositories/zoneRepository.js';
+import { createZoneService, type ZoneService } from '../src/services/zoneService.js';
 
 /**
  * Base con solo las migraciones anteriores a `version` (p. ej. `'009'`), para probar que una
@@ -48,6 +51,15 @@ export function readMovementLog(db: Db): Array<Record<string, unknown>> {
 }
 
 export const stairs = { name: 'Escaleras', x: 100, y: 100, width: 200, height: 150, active: true };
+
+/** Servicio de zonas real sobre la base en memoria, con registro de cambios (RC-01). */
+export function createTestZoneService(db: Db): ZoneService {
+  return createZoneService({
+    zones: createZoneRepository(db),
+    changes: createZoneChangeLogRepository(db),
+    runInTransaction: (fn) => db.transaction(fn).immediate(),
+  });
+}
 
 /** `sessionService` real sobre la misma base en memoria. */
 export function createTestSessions(db: Db): SessionService {

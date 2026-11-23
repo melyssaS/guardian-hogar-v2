@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { FloorPlan } from '../components/FloorPlan';
+import { RulesCatalog } from '../components/RulesCatalog';
 import { Toast } from '../components/Toast';
 import { ZoneForm } from '../components/ZoneForm';
 import { ZoneList } from '../components/ZoneList';
@@ -143,6 +144,8 @@ export function RoomsPage() {
                 }}
               />
             )}
+
+            <RulesCatalog />
           </div>
         </div>
       </main>

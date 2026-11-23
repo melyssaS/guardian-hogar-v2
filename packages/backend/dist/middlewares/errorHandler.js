@@ -2,7 +2,11 @@ import { AppError } from '../errors/AppError.js';
 /** Traduce errores a `{ code, message }` (RNF-05). Nunca expone stack traces (RNF-04). */
 export function errorHandler(err, _req, res, _next) {
     if (err instanceof AppError) {
-        res.status(err.status).json({ code: err.code, message: err.message });
+        res
+            .status(err.status)
+            .json(err.cause === undefined
+            ? { code: err.code, message: err.message }
+            : { code: err.code, message: err.message, cause: err.cause });
         return;
     }
     // JSON mal formado en el body (express.json)

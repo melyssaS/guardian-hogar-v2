@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AppError } from '../../src/errors/AppError.js';
-import { createZoneRepository } from '../../src/repositories/zoneRepository.js';
-import { createZoneService, type ZoneService } from '../../src/services/zoneService.js';
-import { createTestDb, stairs } from '../helpers.js';
+import { type ZoneService } from '../../src/services/zoneService.js';
+import { createTestDb, createTestZoneService, stairs } from '../helpers.js';
 
 function expectAppError(fn: () => unknown, status: number, code: string) {
   try {
@@ -18,7 +17,7 @@ function expectAppError(fn: () => unknown, status: number, code: string) {
 describe('zoneService', () => {
   let service: ZoneService;
   beforeEach(() => {
-    service = createZoneService(createZoneRepository(createTestDb()));
+    service = createTestZoneService(createTestDb());
   });
 
   it('CA-02.1 crea una zona válida', () => {

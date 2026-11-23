@@ -104,6 +104,7 @@ describe('R1.2: origen en zona activa → ORIGIN_IN_RESTRICTED_ZONE', () => {
       authorized: false,
       nextState: 'SAFE_STOP',
       collisionType: 'ORIGIN_IN_RESTRICTED_ZONE',
+      zoneName: 'Cuarto del bebé',
       reason: expect.any(String),
     });
   });
@@ -119,6 +120,7 @@ describe('R1.2: origen en zona activa → ORIGIN_IN_RESTRICTED_ZONE', () => {
       authorized: false,
       nextState: 'SAFE_STOP',
       collisionType: 'ORIGIN_IN_RESTRICTED_ZONE',
+      zoneName: 'Cuarto del bebé',
       reason: expect.any(String),
     });
   });

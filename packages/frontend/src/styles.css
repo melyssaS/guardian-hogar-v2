@@ -195,6 +195,10 @@ svg {
   background: #e9f0ff;
   color: #3164ca;
 }
+.pill.gray {
+  background: #eceff3;
+  color: #6c7889;
+}
 
 .btn {
   display: inline-flex;
@@ -670,5 +674,114 @@ svg {
   }
   .coord-row .btn {
     grid-column: 1 / -1;
+  }
+}
+
+/* Tablas (bitácora de incidentes), como en el prototipo */
+.tablewrap {
+  width: 100%;
+  overflow: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+th {
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #94a2b1;
+  font-weight: 750;
+  padding: 12px;
+  border-bottom: 1px solid #e5edf3;
+  background: #fbfcfe;
+}
+td {
+  font-size: 11.4px;
+  color: #4d5c6f;
+  padding: 13px 12px;
+  border-bottom: 1px solid #eef2f6;
+}
+tr.clickable {
+  cursor: pointer;
+}
+tr.clickable:hover,
+tr.selected {
+  background: #f4f9fd;
+}
+
+/* Tarjetas de robots y modal de registro, como en el prototipo */
+.three {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 15px;
+}
+.robot-card {
+  padding: 18px;
+}
+.robot-card h3 {
+  font-size: 14px;
+  margin: 12px 0 3px;
+}
+.robot-card p {
+  font-size: 11px;
+  color: #8494a8;
+  margin: 0 0 13px;
+}
+.robot-icon {
+  height: 44px;
+  width: 44px;
+  border-radius: 13px;
+  background: #ecf4fc;
+  color: #3d6db1;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+}
+.card-link {
+  display: inline-block;
+  margin-top: 12px;
+  font-size: 11px;
+  font-weight: 780;
+  color: #1d8c78;
+}
+.modalwrap {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: #08182888;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modalwrap.open {
+  display: flex;
+}
+.modal {
+  background: #fff;
+  border-radius: 17px;
+  box-shadow: 0 30px 90px #0004;
+  padding: 25px;
+  width: min(450px, 100%);
+}
+.modal h3 {
+  margin: 0 0 8px;
+  font-size: 17px;
+}
+.modal p {
+  margin: 0 0 22px;
+  font-size: 11.5px;
+  color: #798ca0;
+  line-height: 1.6;
+}
+.modal-actions {
+  justify-content: flex-end;
+  margin-top: 23px;
+}
+@media (max-width: 900px) {
+  .three {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

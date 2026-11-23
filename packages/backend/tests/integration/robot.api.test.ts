@@ -108,10 +108,12 @@ describe('API /api/robot', () => {
         reason: expect.any(String),
         createdAt: expect.any(String),
       });
-      // zonesSnapshot presente: el snapshot incluye las zonas activas usadas en la decisión.
-      expect(Array.isArray(list.body[0].zonesSnapshot)).toBe(true);
-      expect(list.body[0].zonesSnapshot.length).toBeGreaterThan(0);
-      expect(list.body[0].zonesSnapshot).toContainEqual(
+      // El resumen no trae el snapshot; el detalle (R5.7) incluye las zonas activas usadas.
+      expect(list.body[0]).not.toHaveProperty('zonesSnapshot');
+      const detail = await request(app).get(`/api/incidents/${denied.body.incidentId}`);
+      expect(detail.status).toBe(200);
+      expect(Array.isArray(detail.body.zonesSnapshot)).toBe(true);
+      expect(detail.body.zonesSnapshot).toContainEqual(
         expect.objectContaining({ name: 'Escaleras', active: true }),
       );
     });
@@ -193,9 +195,11 @@ describe('API /api/robot', () => {
       const res = await recover();
       expect(res.status).toBe(200);
       expect(res.body).toEqual({
-        recovered: true,
+        robotId: 1,
         state: 'IDLE',
         position: { x: 120, y: 90 },
+        positionQuality: 'RELIABLE',
+        transitioned: true,
       });
       expect((await state()).body).toEqual({
         state: 'IDLE',
@@ -208,14 +212,15 @@ describe('API /api/robot', () => {
       expect(after.body.decision).toBe('AUTHORIZED');
     });
 
-    it('rechaza la recuperación cuando el robot no está en parada (IDLE) → 409 sin efectos', async () => {
+    it('en IDLE la recuperación es idempotente → 200 transitioned:false y sin efectos (R4.5)', async () => {
       const res = await recover();
-      expect(res.status).toBe(409);
-      expect(res.body).toMatchObject({
-        recovered: false,
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        robotId: 1,
         state: 'IDLE',
         position: { x: 120, y: 90 },
-        reason: expect.any(String),
+        positionQuality: 'RELIABLE',
+        transitioned: false,
       });
       // Sin efectos: el estado permanece IDLE en la misma posición.
       expect((await state()).body).toEqual({
@@ -223,6 +228,41 @@ describe('API /api/robot', () => {
         position: { x: 120, y: 90 },
         positionQuality: 'RELIABLE',
       });
+    });
+  });
+
+  describe('POST /recover — 409 RECOVERY_NOT_ALLOWED (R4.4, Property 16)', () => {
+    it('posición insegura: 409 { code, cause, message }, estado sin cambios y fila de auditoría', async () => {
+      db.prepare(
+        "UPDATE robot_state SET state = 'SAFE_STOP', pos_x = 100, pos_y = 300 WHERE robot_id = 1",
+      ).run();
+
+      const res = await recover();
+
+      expect(res.status).toBe(409);
+      expect(res.body).toEqual({
+        code: 'RECOVERY_NOT_ALLOWED',
+        cause: 'UNSAFE_POSITION',
+        message: expect.any(String),
+      });
+      expect((await state()).body).toEqual({
+        state: 'SAFE_STOP',
+        position: { x: 100, y: 300 },
+        positionQuality: 'RELIABLE',
+      });
+      // La fila se lee DESPUÉS de la respuesta 409: el rechazo quedó confirmado.
+      expect(db.prepare('SELECT robot_id, event_code, state FROM audit_log').all()).toEqual([
+        { robot_id: 1, event_code: 'RECOVERY_NOT_ALLOWED', state: 'SAFE_STOP' },
+      ]);
+    });
+
+    it('calidad no confiable: cause UNRELIABLE_DATA', async () => {
+      db.prepare(
+        "UPDATE robot_state SET state = 'DEGRADED', position_quality = 'UNRELIABLE' WHERE robot_id = 1",
+      ).run();
+      const res = await recover();
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({ code: 'RECOVERY_NOT_ALLOWED', cause: 'UNRELIABLE_DATA' });
     });
   });
 
@@ -234,7 +274,7 @@ describe('API /api/robot', () => {
       expect(res.body).toEqual([]);
     });
 
-    it('cada denegación que para añade un incidente; se listan en orden de inserción', async () => {
+    it('cada denegación que para añade un incidente; se listan del más reciente al más antiguo', async () => {
       // Primera denegación (Escaleras).
       const d1 = await move({ destination: { x: 100, y: 300 } });
       await recover(); // libera la parada para poder volver a evaluar geometría
@@ -244,14 +284,24 @@ describe('API /api/robot', () => {
       const list = await incidents();
       expect(list.status).toBe(200);
       expect(list.body).toHaveLength(2);
-      // Orden append-only: el primero creado va primero y los ids son crecientes.
+      // Más reciente primero y los ids son crecientes en el tiempo (RC-14, R5.6).
       expect(list.body.map((i: { id: number }) => i.id)).toEqual([
-        d1.body.incidentId,
         d2.body.incidentId,
+        d1.body.incidentId,
       ]);
       expect(d2.body.incidentId).toBeGreaterThan(d1.body.incidentId);
-      expect(list.body[0]).toMatchObject({ destination: { x: 100, y: 300 } });
-      expect(list.body[1]).toMatchObject({ destination: { x: 300, y: 300 } });
+      expect(list.body[0]).toMatchObject({
+        destination: { x: 300, y: 300 },
+        robotId: 1,
+        rule: 'R-ZONA-01',
+        zoneName: 'Cuarto del bebé',
+      });
+      expect(list.body[1]).toMatchObject({
+        destination: { x: 100, y: 300 },
+        robotId: 1,
+        rule: 'R-ZONA-01',
+        zoneName: 'Escaleras',
+      });
     });
   });
 });

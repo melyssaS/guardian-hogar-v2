@@ -4,10 +4,10 @@ import type { Db } from '../../src/db/connection.js';
 import { seedDefaultRooms } from '../../src/db/seed.js';
 import { createAuditLogRepository } from '../../src/repositories/auditLogRepository.js';
 import { createIncidentRepository } from '../../src/repositories/incidentRepository.js';
+import { createTransitionLogRepository } from '../../src/repositories/transitionLogRepository.js';
 import { createRobotRepository } from '../../src/repositories/robotRepository.js';
 import { completeMove } from '../../src/rules/stateMachine.js';
-import { createGuardianService, type GuardianService } from '../../src/services/guardianService.js';
-import { createTestDb } from '../helpers.js';
+import { createTestDb, createTestGuardian, type TestGuardian } from '../helpers.js';
 
 // Vivacidad del movimiento (R1.5, §2.2 "MOVING transitorio", Property 9, DD-209).
 //
@@ -20,11 +20,12 @@ import { createTestDb } from '../helpers.js';
 // Usamos `getActiveZones: () => []` para que la geometría nunca deniegue y aislar la vivacidad.
 
 /** Construye el servicio sobre repos reales en memoria, sin zonas activas (geometría libre). */
-function build(db: Db): GuardianService {
-  return createGuardianService({
+function build(db: Db): TestGuardian {
+  return createTestGuardian(db, {
     robots: createRobotRepository(db),
     incidents: createIncidentRepository(db),
     audit: createAuditLogRepository(db),
+    transitions: createTransitionLogRepository(db),
     getActiveZones: () => [],
     runInTransaction: (fn) => db.transaction(fn)(),
     pad: 0,
@@ -38,7 +39,7 @@ const DEST_C: Point = { x: 800, y: 500 };
 
 describe('Vivacidad del movimiento', () => {
   let db: Db;
-  let service: GuardianService;
+  let service: TestGuardian;
 
   beforeEach(() => {
     db = createTestDb();
@@ -48,9 +49,9 @@ describe('Vivacidad del movimiento', () => {
 
   it('dos movimientos válidos consecutivos se autorizan ambos (ninguno queda en MOVING/BUSY)', () => {
     // Primer movimiento: autorizado y el robot queda en IDLE (MOVING transitorio → completeMove).
-    const first = service.move(DEST_A);
-    expect(first).toEqual({ decision: 'AUTHORIZED', state: 'IDLE', position: DEST_A });
-    expect(service.getState()).toEqual({
+    const first = service.move(1, DEST_A);
+    expect(first).toMatchObject({ decision: 'AUTHORIZED', state: 'IDLE', position: DEST_A });
+    expect(service.getState(1)).toEqual({
       state: 'IDLE',
       position: DEST_A,
       positionQuality: 'RELIABLE',
@@ -58,9 +59,9 @@ describe('Vivacidad del movimiento', () => {
 
     // Segundo movimiento inmediato: también autorizado. Si el primero hubiese dejado el robot
     // atascado en MOVING, este sería rechazado con BUSY; la vivacidad lo impide.
-    const second = service.move(DEST_B);
-    expect(second).toEqual({ decision: 'AUTHORIZED', state: 'IDLE', position: DEST_B });
-    expect(service.getState()).toEqual({
+    const second = service.move(1, DEST_B);
+    expect(second).toMatchObject({ decision: 'AUTHORIZED', state: 'IDLE', position: DEST_B });
+    expect(service.getState(1)).toEqual({
       state: 'IDLE',
       position: DEST_B,
       positionQuality: 'RELIABLE',
@@ -68,7 +69,7 @@ describe('Vivacidad del movimiento', () => {
   });
 
   it('un tercer movimiento válido refuerza la vivacidad: sin BUSY ni SAFE_STOP en la cadena', () => {
-    const outcomes = [service.move(DEST_A), service.move(DEST_B), service.move(DEST_C)];
+    const outcomes = [service.move(1, DEST_A), service.move(1, DEST_B), service.move(1, DEST_C)];
 
     for (const out of outcomes) {
       expect(out.decision).toBe('AUTHORIZED');
@@ -79,7 +80,7 @@ describe('Vivacidad del movimiento', () => {
     expect(outcomes.some((out) => out.state === 'SAFE_STOP')).toBe(false);
 
     // Estado final consistente con el último destino y sin atasco.
-    expect(service.getState()).toEqual({
+    expect(service.getState(1)).toEqual({
       state: 'IDLE',
       position: DEST_C,
       positionQuality: 'RELIABLE',

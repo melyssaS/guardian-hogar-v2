@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { FloorPlan } from '../../src/components/FloorPlan';
+import { FloorPlan, type PlanRobot } from '../../src/components/FloorPlan';
 import type { Zone } from '../../src/types';
 
 const zone = (id: number, name: string, active: boolean): Zone => ({
@@ -63,11 +63,23 @@ describe('FloorPlan', () => {
   });
 });
 
-// Spec 003 — tarea 14 (RF-01.1, RF-04.4)
-describe('FloorPlan con robot (spec 003)', () => {
-  it('sin robot ni onSelectPoint se comporta como en la spec 001', () => {
+// Spec 003 — tarea 14 (RF-01.1, RF-04.4) y RC-15 (RF-10.2, CA-03.16, CA-03.30, DD-139)
+const planRobot = (over: Partial<PlanRobot> = {}): PlanRobot => ({
+  id: 1,
+  name: 'Aspiradora A1',
+  type: 'VACUUM',
+  state: 'IDLE',
+  position: { x: 300, y: 120 },
+  ...over,
+});
+
+const robotFill = (id: number) =>
+  screen.getByTestId(`robot-${id}`).querySelectorAll('circle')[1]?.getAttribute('fill');
+
+describe('FloorPlan con robots (spec 003)', () => {
+  it('sin robots ni onSelectPoint se comporta como en la spec 001', () => {
     render(<FloorPlan zones={[]} />);
-    expect(screen.queryByTestId('robot')).not.toBeInTheDocument();
+    expect(screen.queryByTestId(/^robot-/)).not.toBeInTheDocument();
     expect(screen.queryByTestId('destination-marker')).not.toBeInTheDocument();
     expect(screen.getByTestId('floor-plan')).not.toHaveStyle({
       cursor: 'crosshair',
@@ -75,28 +87,55 @@ describe('FloorPlan con robot (spec 003)', () => {
   });
 
   it.each([
-    ['IDLE', '#3176d2'],
-    ['MOVING', '#3176d2'],
-    ['SAFE_STOP', '#bd4954'],
-  ] as const)('pinta el robot en %s con el color del prototipo', (state, color) => {
-    render(<FloorPlan zones={[]} robot={{ state, position: { x: 300, y: 120 } }} />);
-    const robot = screen.getByTestId('robot');
+    ['VACUUM', 'IDLE', '#3176d2'],
+    ['VACUUM', 'MOVING', '#3176d2'],
+    ['VACUUM', 'RECOVERING', '#3176d2'],
+    ['GUARD', 'IDLE', '#665dd3'],
+    ['VACUUM', 'SAFE_STOP', '#bd4954'],
+    ['GUARD', 'SAFE_STOP', '#bd4954'],
+    ['VACUUM', 'DEGRADED', '#8893a2'],
+    ['GUARD', 'DEGRADED', '#8893a2'],
+  ] as const)('pinta el %s en %s con el color del prototipo', (type, state, color) => {
+    render(<FloorPlan zones={[]} robots={[planRobot({ type, state })]} />);
+    const robot = screen.getByTestId('robot-1');
     expect(robot).toHaveAttribute('data-state', state);
     expect(robot).toHaveStyle({ transform: 'translate(300px, 120px)' });
-    expect(robot.querySelectorAll('circle')[1]).toHaveAttribute('fill', color);
+    expect(robotFill(1)).toBe(color);
     expect(robot).toHaveTextContent(state);
   });
 
-  it('marca el destino y la trayectoria desde el robot', () => {
+  it('CA-03.16 dibuja un marcador por robot con data-testid robot-<id> y su etiqueta', () => {
     render(
       <FloorPlan
         zones={[]}
-        robot={{ state: 'IDLE', position: { x: 120, y: 90 } }}
+        robots={[
+          planRobot(),
+          planRobot({ id: 2, name: 'Vigilante V2', type: 'GUARD', position: { x: 488, y: 290 } }),
+        ]}
+      />,
+    );
+    expect(screen.getByTestId('robot-1')).toHaveAttribute('data-x', '300');
+    expect(screen.getByTestId('robot-1')).toHaveTextContent('Aspiradora A1');
+    expect(screen.getByTestId('robot-2')).toHaveAttribute('data-x', '488');
+    expect(screen.getByTestId('robot-2')).toHaveTextContent('Vigilante V2');
+    expect(robotFill(1)).toBe('#3176d2');
+    expect(robotFill(2)).toBe('#665dd3');
+  });
+
+  it('marca el destino y la trayectoria desde el robot seleccionado', () => {
+    render(
+      <FloorPlan
+        zones={[]}
+        robots={[
+          planRobot({ position: { x: 120, y: 90 } }),
+          planRobot({ id: 2, position: { x: 488, y: 290 } }),
+        ]}
+        selectedRobotId={2}
         destination={{ x: 450, y: 120 }}
       />,
     );
     const line = screen.getByTestId('destination-marker').querySelector('line');
-    expect(line).toHaveAttribute('x1', '120');
+    expect(line).toHaveAttribute('x1', '488');
     expect(line).toHaveAttribute('x2', '450');
   });
 

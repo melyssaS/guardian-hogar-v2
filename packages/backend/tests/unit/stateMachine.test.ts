@@ -11,23 +11,19 @@ const MISSING: PositionQuality = 'MISSING';
 
 const ALL_STATES: RobotStateName[] = ['IDLE', 'MOVING', 'SAFE_STOP', 'DEGRADED', 'RECOVERING'];
 
-// Transiciones permitidas de requirements §2.2 (sin contar la celda prohibida P-1).
+// Lista blanca de transiciones persistibles T1-T9 (design 3; T10 la escribe la migracion y T9
+// no tiene estado de origen). Las demas celdas de requirements 2.2 quedan fuera: el orden de
+// evaluacion del vigilante las hace inalcanzables ([RC-01 rev3], RC-2).
 // [from, to]
 const ALLOWED: ReadonlyArray<readonly [RobotStateName, RobotStateName]> = [
-  ['IDLE', 'MOVING'], // mueve + AUTHORIZED
-  ['IDLE', 'SAFE_STOP'], // denegación geométrica
-  ['IDLE', 'DEGRADED'], // datos insuficientes
-  ['MOVING', 'IDLE'], // movimiento completado
-  ['MOVING', 'SAFE_STOP'], // denegación / arranque MOVING persistido
-  ['MOVING', 'DEGRADED'], // datos insuficientes
-  ['SAFE_STOP', 'SAFE_STOP'], // absorbe denegaciones / datos
-  ['SAFE_STOP', 'RECOVERING'], // recover válido
-  ['DEGRADED', 'SAFE_STOP'], // denegación
-  ['DEGRADED', 'DEGRADED'], // datos insuficientes
-  ['DEGRADED', 'RECOVERING'], // recover válido
-  ['RECOVERING', 'SAFE_STOP'], // denegación
-  ['RECOVERING', 'DEGRADED'], // datos insuficientes
-  ['RECOVERING', 'IDLE'], // recover completado
+  ['IDLE', 'MOVING'], // T1 move + AUTHORIZED
+  ['MOVING', 'IDLE'], // T2 movimiento completado
+  ['IDLE', 'SAFE_STOP'], // T3 denegacion geometrica o ZONE_DATA_UNAVAILABLE
+  ['IDLE', 'DEGRADED'], // T4/T5 datos insuficientes o perdida de calidad
+  ['SAFE_STOP', 'RECOVERING'], // T6 recover valido
+  ['DEGRADED', 'RECOVERING'], // T6 recover valido
+  ['RECOVERING', 'IDLE'], // T7 recover completado
+  ['MOVING', 'SAFE_STOP'], // T8 arranque con MOVING persistido
 ];
 
 const isAllowed = (from: RobotStateName, to: RobotStateName): boolean =>
@@ -42,7 +38,7 @@ const decision = (over: Partial<GuardianDecision>): GuardianDecision => ({
   ...over,
 });
 
-describe('stateMachine — canTransition (tabla §2.2)', () => {
+describe('stateMachine — canTransition (lista blanca T1–T9)', () => {
   describe('cada transición permitida de la tabla devuelve true (posición confiable)', () => {
     it.each(ALLOWED)('%s → %s es permitida', (from, to) => {
       expect(canTransition(from, to, RELIABLE)).toBe(true);
@@ -124,5 +120,18 @@ describe('stateMachine — applyDecision', () => {
     const snapshot = structuredClone(d);
     applyDecision('IDLE', d);
     expect(d).toEqual(snapshot);
+  });
+});
+
+describe('stateMachine — lista blanca: parejas que dejan de aceptarse (RC-2)', () => {
+  it.each([
+    ['SAFE_STOP', 'SAFE_STOP'],
+    ['DEGRADED', 'DEGRADED'],
+    ['DEGRADED', 'SAFE_STOP'],
+    ['RECOVERING', 'SAFE_STOP'],
+    ['RECOVERING', 'DEGRADED'],
+    ['MOVING', 'DEGRADED'],
+  ] as const)('%s -> %s ya no es permitida', (from, to) => {
+    expect(canTransition(from, to, RELIABLE)).toBe(false);
   });
 });

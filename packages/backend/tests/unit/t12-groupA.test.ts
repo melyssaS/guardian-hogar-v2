@@ -49,6 +49,7 @@ const expectViolation = (destination: Point): void => {
     authorized: false,
     nextState: 'SAFE_STOP',
     collisionType: 'RESTRICTED_ZONE_VIOLATION',
+    zoneName: 'Escaleras',
     reason: expect.any(String),
   });
 };

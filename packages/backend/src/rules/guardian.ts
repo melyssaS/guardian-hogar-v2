@@ -1,9 +1,15 @@
 import {
+  COLLISION_PAD,
+  expandZone,
   isCollision,
+  pointInAABB,
   type CollisionType,
   type DecisionCode,
   type GuardianDecision,
   type GuardianInput,
+  type PositionQuality,
+  type Point,
+  type RecoveryRejectionCause,
   type RobotStateName,
   type Zone,
 } from '@home-guardian/domain';
@@ -40,8 +46,11 @@ function decision(
   authorized: boolean,
   nextState: RobotStateName,
   collisionType: CollisionType | null,
+  zoneName?: string,
 ): GuardianDecision {
-  return { code, authorized, nextState, collisionType, reason: REASON_BY_CODE[code] };
+  const base = { code, authorized, nextState, collisionType, reason: REASON_BY_CODE[code] };
+  // `zoneName` solo existe en las denegaciones geométricas (R5.5); en el resto se omite.
+  return zoneName === undefined ? base : { ...base, zoneName };
 }
 
 /**
@@ -88,17 +97,19 @@ export function evaluateMovement(input: GuardianInput): GuardianDecision {
   // 5-7. Geometría: colisión de mayor prioridad global entre todas las zonas activas.
   const segment = { from: origin, to: destination };
   let best: CollisionType | null = null;
+  let bestZone: Zone | null = null;
   for (const zone of zones) {
     if (!isActive(zone)) continue;
     const { type } = isCollision(zone, segment, pad);
     if (type !== null && outranks(type, best)) {
       best = type;
+      bestZone = zone;
       // Origen es la prioridad máxima: no puede ser superado, corta temprano.
       if (best === 'ORIGIN_IN_RESTRICTED_ZONE') break;
     }
   }
-  if (best !== null) {
-    return decision(best, false, 'SAFE_STOP', best);
+  if (best !== null && bestZone !== null) {
+    return decision(best, false, 'SAFE_STOP', best, bestZone.name);
   }
 
   // 8. Autorizado.
@@ -114,4 +125,56 @@ function isActive(zone: Zone): boolean {
 function outranks(candidate: CollisionType, current: CollisionType | null): boolean {
   if (current === null) return true;
   return COLLISION_PRIORITY.indexOf(candidate) < COLLISION_PRIORITY.indexOf(current);
+}
+
+/** Resultado de `evaluateRecovery`: permitida o rechazada con su causa (R4.4). */
+export type RecoveryEvaluation =
+  { allowed: true } | { allowed: false; cause: RecoveryRejectionCause };
+
+/**
+ * Regla pura de recuperación (spec 002 R4.4). Orden estricto, se detiene en el primer fallo:
+ * calidad distinta de `RELIABLE` → `UNRELIABLE_DATA`; zonas no disponibles (`null`) →
+ * `ZONE_DATA_UNAVAILABLE`; posición dentro de una zona ACTIVA expandida por `pad` →
+ * `UNSAFE_POSITION`. Las zonas con `active === false` se ignoran (defensa en profundidad).
+ */
+export function evaluateRecovery(input: {
+  positionQuality: PositionQuality;
+  position: Point;
+  zones: Zone[] | null;
+  pad?: number;
+}): RecoveryEvaluation {
+  const { positionQuality, position, zones, pad } = input;
+  if (positionQuality !== 'RELIABLE') return { allowed: false, cause: 'UNRELIABLE_DATA' };
+  if (zones === null) return { allowed: false, cause: 'ZONE_DATA_UNAVAILABLE' };
+  if (isInsideActiveZone(position, zones, pad)) return { allowed: false, cause: 'UNSAFE_POSITION' };
+  return { allowed: true };
+}
+
+/** Resultado de `evaluateStartPosition` (R12.2). */
+export type StartPositionEvaluation =
+  | { allowed: true }
+  | { allowed: false; reason: 'ROBOT_START_IN_RESTRICTED_ZONE' | 'ZONE_DATA_UNAVAILABLE' };
+
+/**
+ * Regla pura de la posición de alta de un robot (spec 002 R12.2). Dentro de una zona activa
+ * expandida por `pad` → `ROBOT_START_IN_RESTRICTED_ZONE`; zonas no disponibles (`null`) →
+ * rechazo con razón `ZONE_DATA_UNAVAILABLE` (el servicio lo traduce a
+ * `ROBOT_START_NOT_VERIFIABLE`). Las zonas inactivas se ignoran.
+ */
+export function evaluateStartPosition(input: {
+  position: Point;
+  zones: Zone[] | null;
+  pad?: number;
+}): StartPositionEvaluation {
+  const { position, zones, pad } = input;
+  if (zones === null) return { allowed: false, reason: 'ZONE_DATA_UNAVAILABLE' };
+  if (isInsideActiveZone(position, zones, pad)) {
+    return { allowed: false, reason: 'ROBOT_START_IN_RESTRICTED_ZONE' };
+  }
+  return { allowed: true };
+}
+
+/** `true` si el punto cae dentro de alguna zona activa expandida por `pad`. */
+function isInsideActiveZone(point: Point, zones: Zone[], pad: number = COLLISION_PAD): boolean {
+  return zones.some((zone) => isActive(zone) && pointInAABB(point, expandZone(zone, pad)));
 }

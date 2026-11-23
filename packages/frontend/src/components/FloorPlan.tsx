@@ -1,6 +1,6 @@
 import { FLOOR_HEIGHT, FLOOR_WIDTH } from '@home-guardian/domain';
 import type { MouseEvent } from 'react';
-import type { Point, RobotSnapshot, Zone } from '../types';
+import type { Point, RobotStateName, RobotType, Zone } from '../types';
 
 export const GRID_STEP = 100;
 
@@ -24,14 +24,39 @@ const STYLE = {
   },
 } as const;
 
-/** Colores del robot en el prototipo: activo (azul) y detenido (rojo). */
-const ROBOT_COLOR = { active: '#3176d2', stopped: '#bd4954' } as const;
+/**
+ * Colores del robot (spec 003 R10.2): activo azul (aspiradora) o morado (vigilante), `SAFE_STOP`
+ * rojo y `DEGRADED` gris. `MOVING` y `RECOVERING` se pintan como activo.
+ */
+const ROBOT_COLOR = {
+  VACUUM: '#3176d2',
+  GUARD: '#665dd3',
+  stopped: '#bd4954',
+  degraded: '#8893a2',
+} as const;
+
+function robotColor(robot: PlanRobot): string {
+  if (robot.state === 'SAFE_STOP') return ROBOT_COLOR.stopped;
+  if (robot.state === 'DEGRADED') return ROBOT_COLOR.degraded;
+  return ROBOT_COLOR[robot.type];
+}
 const DESTINATION_COLOR = '#316cde';
+
+/** Robot tal como lo devuelve la API: el plano solo lo dibuja (spec 003, RF-04.4, RF-10.2). */
+export interface PlanRobot {
+  id: number;
+  name: string;
+  type: RobotType;
+  state: RobotStateName;
+  position: Point;
+}
 
 interface FloorPlanProps {
   zones: Zone[];
-  /** Estado y posición del robot según la API (spec 003, RF-04.4). */
-  robot?: RobotSnapshot | null;
+  /** Todos los robots del catálogo; cada uno pinta `data-testid="robot-<id>"` (DD-139). */
+  robots?: readonly PlanRobot[];
+  /** Robot al que se aplican el clic y el destino; de él parte la trayectoria marcada. */
+  selectedRobotId?: number;
   /** Destino elegido, para marcarlo en el plano. */
   destination?: Point | null;
   /** Si se indica, un clic en el plano emite ese punto como destino (RF-01.1). */
@@ -60,33 +85,27 @@ export function clientToFloor(clientX: number, clientY: number, box: Box): Point
   };
 }
 
-const STATE_LABEL: Record<RobotSnapshot['state'], string> = {
-  IDLE: 'Robot · IDLE',
-  MOVING: 'Robot · MOVING',
-  SAFE_STOP: 'Robot · SAFE_STOP',
-  DEGRADED: 'Robot · DEGRADED',
-  RECOVERING: 'Robot · RECOVERING',
-};
-
 /** Robot con el aspecto del prototipo. La posición se anima con CSS (`.robot-marker`). */
-function RobotMarker({ robot }: { robot: RobotSnapshot }) {
-  const stopped = robot.state === 'SAFE_STOP';
-  const c = stopped ? ROBOT_COLOR.stopped : ROBOT_COLOR.active;
+function RobotMarker({ robot, selected }: { robot: PlanRobot; selected: boolean }) {
+  const c = robotColor(robot);
   const { x, y } = robot.position;
+  const label = `${robot.name} · ${robot.state}`;
+  const width = Math.max(116, label.length * 6.4 + 16);
   return (
     <g
-      data-testid="robot"
+      data-testid={`robot-${robot.id}`}
       data-state={robot.state}
       data-x={x}
       data-y={y}
+      data-selected={selected ? 'true' : undefined}
       className="robot-marker"
       style={{ transform: `translate(${x}px, ${y}px)` }}
       pointerEvents="none"
     >
-      <circle r={28} fill={c} opacity={0.15} />
+      <circle r={28} fill={c} opacity={selected ? 0.3 : 0.15} />
       <circle r={19} fill={c} stroke="white" strokeWidth={3} />
       <circle r={5} fill="white" />
-      <rect x={-58} y={-54} width={116} height={22} rx={7} fill="#18314a" />
+      <rect x={-width / 2} y={-54} width={width} height={22} rx={7} fill="#18314a" />
       <text
         textAnchor="middle"
         y={-39}
@@ -95,7 +114,7 @@ function RobotMarker({ robot }: { robot: RobotSnapshot }) {
         fontWeight={800}
         fill="white"
       >
-        {STATE_LABEL[robot.state]}
+        {label}
       </text>
     </g>
   );
@@ -190,14 +209,22 @@ function ZoneShape({ zone }: { zone: Zone }) {
  * Plano 2D a escala FLOOR_WIDTH × FLOOR_HEIGHT, origen arriba-izquierda (eje Y hacia abajo,
  * igual que SVG) y cuadrícula cada GRID_STEP (CA-01.1). Una zona activa se destaca como
  * restringida (borde rojo discontinuo); una inactiva se dibuja como área permitida (CA-01.2).
- * Spec 003: opcionalmente pinta el robot y el destino, y captura el destino por clic.
+ * Spec 003: opcionalmente pinta los robots y el destino, y captura el destino por clic.
  */
-export function FloorPlan({ zones, robot, destination, onSelectPoint }: FloorPlanProps) {
+export function FloorPlan({
+  zones,
+  robots = [],
+  selectedRobotId,
+  destination,
+  onSelectPoint,
+}: FloorPlanProps) {
   const xs = Array.from({ length: FLOOR_WIDTH / GRID_STEP + 1 }, (_, i) => i * GRID_STEP);
   const ys = Array.from({ length: FLOOR_HEIGHT / GRID_STEP + 1 }, (_, i) => i * GRID_STEP);
   const restricted = zones.filter((z) => z.active).length;
   // Las restringidas se pintan al final para que su borde quede por encima.
   const ordered = [...zones.filter((z) => !z.active), ...zones.filter((z) => z.active)];
+
+  const selected = robots.find((r) => r.id === selectedRobotId);
 
   const handleClick = onSelectPoint
     ? (e: MouseEvent<SVGSVGElement>) => {
@@ -228,8 +255,10 @@ export function FloorPlan({ zones, robot, destination, onSelectPoint }: FloorPla
       {ordered.map((z) => (
         <ZoneShape key={z.id} zone={z} />
       ))}
-      {destination && <DestinationMarker point={destination} from={robot?.position} />}
-      {robot && <RobotMarker robot={robot} />}
+      {destination && <DestinationMarker point={destination} from={selected?.position} />}
+      {robots.map((r) => (
+        <RobotMarker key={r.id} robot={r} selected={r.id === selectedRobotId} />
+      ))}
     </svg>
   );
 }

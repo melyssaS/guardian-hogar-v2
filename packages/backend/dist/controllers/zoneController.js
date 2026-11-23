@@ -11,6 +11,9 @@ export function createZoneController(service) {
         create(req, res) {
             res.status(201).json(service.create(req.body));
         },
+        listChanges(_req, res) {
+            res.json(service.listChanges());
+        },
         update(req, res) {
             res.json(service.update(req.params.id, req.body));
         },

@@ -1,0 +1,33 @@
+# Blueprint de Render — dos servicios Docker en plan free.
+# Nota free tier: sin disco persistente. La BD SQLite es efímera y se re-siembra
+# en cada arranque/redeploy (server.ts → initDatabase). Suficiente para la demo.
+# Nota free tier: los servicios se duermen tras ~15 min; el primer request tarda ~50s.
+services:
+  # ── Backend: API Express + SQLite ──────────────────────────────────────────
+  - type: web
+    name: home-guardian-api
+    runtime: docker
+    plan: free
+    dockerfilePath: packages/backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: DB_FILE
+        value: /app/data/guardian.db
+      # Se completa tras el primer deploy con la URL pública del frontend.
+      - key: CORS_ORIGINS
+        sync: false
+
+  # ── Frontend: SPA React servida por nginx con proxy /api ───────────────────
+  - type: web
+    name: home-guardian-web
+    runtime: docker
+    plan: free
+    dockerfilePath: packages/frontend/Dockerfile
+    dockerContext: .
+    envVars:
+      # Render inyecta PORT automáticamente; nginx escucha en él (no hace falta declararlo).
+      # URL pública del backend para el proxy /api — incluir el esquema https://.
+      # Se completa tras el primer deploy con la URL del servicio home-guardian-api.
+      - key: BACKEND_URL
+        sync: false

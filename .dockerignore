@@ -1,0 +1,31 @@
+# Dependencias y artefactos de build (se regeneran dentro de la imagen)
+node_modules
+**/node_modules
+**/dist
+packages/frontend/dist
+packages/domain/dist
+packages/backend/dist
+
+# Datos locales y entorno
+.env
+.env.*
+!.env.example
+**/data
+*.db
+*.db-shm
+*.db-wal
+
+# Tooling y pruebas que no van a la imagen
+.git
+.gitignore
+.kiro
+**/coverage
+**/.vitest
+**/playwright-report
+**/test-results
+packages/**/tests
+
+# Varios
+*.log
+npm-debug.log*
+.DS_Store

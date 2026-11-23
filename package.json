@@ -19,8 +19,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "dev:backend": "npm run dev -w @home-guardian/backend",
-    "dev:frontend": "npm run dev -w @home-guardian/frontend"
+    "dev:backend": "npm run build:domain && npm run dev -w @home-guardian/backend",
+    "dev:frontend": "npm run build:domain && npm run dev -w @home-guardian/frontend"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

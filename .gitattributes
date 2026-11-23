@@ -1,0 +1,8 @@
+# Archivos que corren dentro de contenedores Linux: deben conservar saltos LF
+# aunque se editen en Windows (CRLF rompería nginx y los scripts del Dockerfile).
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.Dockerfile    text eol=lf
+nginx.conf      text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf

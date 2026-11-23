@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { pointSchema } from './simulation.schema.js';
+import { pointSchema } from './point.schema.js';
 
 /**
  * Cuerpo de POST /api/robots/:robotId/move (spec 003 R8): destino, sesión (UUID) y secuencia

@@ -1,4 +1,4 @@
-import type { Point } from '@home-guardian/domain';
+import type { Point, RobotStatus } from '@home-guardian/domain';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Db } from '../../src/db/connection.js';
 import { seedDefaultRooms } from '../../src/db/seed.js';
@@ -14,6 +14,12 @@ import { createTestDb, createTestGuardian, type TestGuardian } from '../helpers.
 
 const IN_STAIRS: Point = { x: 100, y: 300 };
 const FREE: Point = { x: 450, y: 120 };
+
+/** Estado, posición y calidad del robot; `lastRequest` cambia al consumir la secuencia (R11.5). */
+function withoutRequest(status: RobotStatus): Omit<RobotStatus, 'lastRequest'> {
+  const { robotId, state, position, positionQuality } = status;
+  return { robotId, state, position, positionQuality };
+}
 
 function build(db: Db): TestGuardian {
   const zones = createZoneRepository(db);
@@ -46,7 +52,7 @@ describe('rechazos por estado auditados por robot (Property 16)', () => {
 
   it('SAFE_STOP_ACTIVE de V2 (robot 2): la fila lleva robot_id = 2 y V2 no cambia', () => {
     expect(service.move(2, IN_STAIRS).decision).toBe('DENIED');
-    const stopped = service.getState(2);
+    const stopped = service.getStatus(2);
     expect(stopped.state).toBe('SAFE_STOP');
 
     const out = service.move(2, FREE);
@@ -55,14 +61,14 @@ describe('rechazos por estado auditados por robot (Property 16)', () => {
     expect(readAudit(db)).toEqual([
       { robot_id: 2, event_code: 'SAFE_STOP_ACTIVE', state: 'SAFE_STOP', x: FREE.x, y: FREE.y },
     ]);
-    expect(service.getState(2)).toEqual(stopped);
+    expect(service.getStatus(2)).toEqual(expect.objectContaining(withoutRequest(stopped)));
     // El robot A1 no se ve afectado (Property 15).
-    expect(service.getState(1).state).toBe('IDLE');
+    expect(service.getStatus(1).state).toBe('IDLE');
   });
 
   it('BUSY de V2 (MOVING sembrado): fila con robot_id = 2, estado MOVING y sin cambios', () => {
     db.prepare("UPDATE robot_state SET state = 'MOVING' WHERE robot_id = 2").run();
-    const before = service.getState(2);
+    const before = service.getStatus(2);
 
     const out = service.move(2, FREE);
 
@@ -70,7 +76,7 @@ describe('rechazos por estado auditados por robot (Property 16)', () => {
     expect(readAudit(db)).toEqual([
       { robot_id: 2, event_code: 'BUSY', state: 'MOVING', x: FREE.x, y: FREE.y },
     ]);
-    expect(service.getState(2)).toEqual(before);
+    expect(service.getStatus(2)).toEqual(expect.objectContaining(withoutRequest(before)));
     expect(db.prepare('SELECT COUNT(*) AS n FROM incidents').get()).toEqual({ n: 0 });
   });
 

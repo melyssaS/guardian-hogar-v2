@@ -1,11 +1,10 @@
-import type { MoveResult } from '@home-guardian/domain';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Db } from '../../src/db/connection.js';
-import { createMovementLogRepository } from '../../src/repositories/movementLogRepository.js';
 import { createRobotRepository } from '../../src/repositories/robotRepository.js';
 import { createTestDb, readMovementLog } from '../helpers.js';
 
-// Spec 003 — tareas 3, 4, 5, 6
+// Spec 003 — tareas 3, 4, 5, 6 (adaptadas en spec 002 RC-20: la fila única de A1 se lee y se
+// escribe con los métodos por robot)
 describe('robotRepository (RF-02.1, DD-103)', () => {
   let db: Db;
   beforeEach(() => {
@@ -13,16 +12,16 @@ describe('robotRepository (RF-02.1, DD-103)', () => {
   });
 
   it('una base nueva tiene el robot en IDLE en la posición inicial', () => {
-    expect(createRobotRepository(db).get()).toEqual({
+    expect(createRobotRepository(db).getStatus(1)).toMatchObject({
       state: 'IDLE',
       position: { x: 120, y: 90 },
     });
   });
 
-  it('save actualiza estado y posición solo de A1 (robot_id = 1)', () => {
+  it('saveState actualiza estado y posición solo de A1 (robot_id = 1)', () => {
     const repo = createRobotRepository(db);
-    repo.save({ state: 'SAFE_STOP', position: { x: 300.5, y: 42 } });
-    expect(repo.get()).toEqual({
+    repo.saveState(1, 'SAFE_STOP', { x: 300.5, y: 42 });
+    expect(repo.getStatus(1)).toMatchObject({
       state: 'SAFE_STOP',
       position: { x: 300.5, y: 42 },
     });
@@ -46,7 +45,7 @@ describe('robotRepository (RF-02.1, DD-103)', () => {
   });
 });
 
-// Spec 002 — tarea 8: lectura/escritura de position_quality y snapshot completo (migración 005)
+// Spec 002 — tarea 8: lectura/escritura de position_quality (migración 005)
 describe('robotRepository positionQuality (spec 002, §4, R6)', () => {
   let db: Db;
   beforeEach(() => {
@@ -54,44 +53,43 @@ describe('robotRepository positionQuality (spec 002, §4, R6)', () => {
   });
 
   it('R6.1 el robot sembrado tiene positionQuality RELIABLE', () => {
-    const repo = createRobotRepository(db);
-    expect(repo.getPositionQuality()).toBe('RELIABLE');
-    expect(repo.getFull()).toEqual({
+    expect(createRobotRepository(db).getStatus(1)).toEqual({
+      robotId: 1,
       state: 'IDLE',
       position: { x: 120, y: 90 },
       positionQuality: 'RELIABLE',
     });
   });
 
-  it('setPositionQuality persiste la calidad sin tocar estado ni posición', () => {
+  it('saveQuality persiste la calidad sin tocar estado ni posición', () => {
     const repo = createRobotRepository(db);
-    repo.setPositionQuality('MISSING');
-    expect(repo.getFull()).toEqual({
+    repo.saveQuality(1, 'MISSING');
+    expect(repo.getStatus(1)).toEqual({
+      robotId: 1,
       state: 'IDLE',
       position: { x: 120, y: 90 },
       positionQuality: 'MISSING',
     });
   });
 
-  it('saveFull persiste estado ampliado (DEGRADED), posición y calidad a la vez', () => {
+  it('saveState persiste el estado ampliado (DEGRADED) y la posición; saveQuality, la calidad', () => {
     const repo = createRobotRepository(db);
-    repo.saveFull({
-      state: 'DEGRADED',
-      position: { x: 55.5, y: 12 },
-      positionQuality: 'UNRELIABLE',
-    });
-    expect(repo.getFull()).toEqual({
+    repo.saveState(1, 'DEGRADED', { x: 55.5, y: 12 });
+    repo.saveQuality(1, 'UNRELIABLE');
+    expect(repo.getStatus(1)).toEqual({
+      robotId: 1,
       state: 'DEGRADED',
       position: { x: 55.5, y: 12 },
       positionQuality: 'UNRELIABLE',
     });
   });
 
-  it('save (spec 003) conserva la positionQuality vigente', () => {
+  it('saveState conserva la positionQuality vigente', () => {
     const repo = createRobotRepository(db);
-    repo.setPositionQuality('MISSING');
-    repo.save({ state: 'SAFE_STOP', position: { x: 300, y: 42 } });
-    expect(repo.getFull()).toEqual({
+    repo.saveQuality(1, 'MISSING');
+    repo.saveState(1, 'SAFE_STOP', { x: 300, y: 42 });
+    expect(repo.getStatus(1)).toEqual({
+      robotId: 1,
       state: 'SAFE_STOP',
       position: { x: 300, y: 42 },
       positionQuality: 'MISSING',
@@ -99,27 +97,28 @@ describe('robotRepository positionQuality (spec 002, §4, R6)', () => {
   });
 });
 
-describe('movementLogRepository (RF-05, DD-105)', () => {
+// `movement_log` (spec 003) se conserva como histórico inmutable que ya no recibe filas (spec 002
+// R9, design §4): el repositorio que la escribía se retiró en RC-20, y la tabla conserva su
+// garantía append-only (RF-05.2, DD-105), que se prueba con inserciones directas.
+describe('movement_log — histórico append-only (RF-05.2, DD-105)', () => {
   let db: Db;
   beforeEach(() => {
     db = createTestDb();
   });
 
-  const stop: MoveResult = {
-    decision: 'PREVENTIVE_STOP',
-    state: 'SAFE_STOP',
-    position: { x: 120, y: 90 },
-    collisionType: 'TRAJECTORY_CROSSES_ZONE',
-    zoneName: 'Escaleras',
-    reason: 'Trajectory crosses restricted zone: Escaleras',
-  };
+  const insert = () =>
+    db
+      .prepare(
+        `INSERT INTO movement_log
+           (decision, state_after, origin_x, origin_y, dest_x, dest_y, collision_type, zone_name, reason)
+         VALUES ('PREVENTIVE_STOP', 'SAFE_STOP', 120, 90, 100, 500, 'TRAJECTORY_CROSSES_ZONE',
+                 'Escaleras', 'Trajectory crosses restricted zone: Escaleras')`,
+      )
+      .run();
 
-  it('CA-03.8 inserta decisión, causa, origen, destino y estado resultante', () => {
-    createMovementLogRepository(db).append({
-      origin: { x: 120, y: 90 },
-      destination: { x: 100, y: 500 },
-      result: stop,
-    });
+  it('la base nueva conserva la tabla vacía y admite el esquema original', () => {
+    expect(readMovementLog(db)).toEqual([]);
+    insert();
     expect(readMovementLog(db)).toEqual([
       {
         decision: 'PREVENTIVE_STOP',
@@ -135,29 +134,8 @@ describe('movementLogRepository (RF-05, DD-105)', () => {
     ]);
   });
 
-  it('guarda NULL en la causa cuando no hay colisión', () => {
-    createMovementLogRepository(db).append({
-      origin: { x: 0, y: 0 },
-      destination: { x: 1, y: 1 },
-      result: {
-        decision: 'ALLOW',
-        state: 'MOVING',
-        position: { x: 1, y: 1 },
-        reason: 'ok',
-      },
-    });
-    expect(readMovementLog(db)[0]).toMatchObject({
-      collision_type: null,
-      zone_name: null,
-    });
-  });
-
-  it('RF-05.2 el registro es inmutable: la base rechaza UPDATE y DELETE', () => {
-    createMovementLogRepository(db).append({
-      origin: { x: 0, y: 0 },
-      destination: { x: 1, y: 1 },
-      result: stop,
-    });
+  it('el registro es inmutable: la base rechaza UPDATE y DELETE', () => {
+    insert();
     expect(() => db.prepare("UPDATE movement_log SET decision = 'ALLOW'").run()).toThrow(
       /append-only/,
     );

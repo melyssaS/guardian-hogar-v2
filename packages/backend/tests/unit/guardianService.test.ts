@@ -7,7 +7,7 @@ import { createIncidentRepository } from '../../src/repositories/incidentReposit
 import { createTransitionLogRepository } from '../../src/repositories/transitionLogRepository.js';
 import { createRobotRepository } from '../../src/repositories/robotRepository.js';
 import { createZoneRepository } from '../../src/repositories/zoneRepository.js';
-import { createTestDb, createTestGuardian, type TestGuardian } from '../helpers.js';
+import { createTestDb, createTestGuardian, setRobotState, type TestGuardian } from '../helpers.js';
 
 // Robot sembrado: IDLE en (120, 90) (Sala), positionQuality RELIABLE (migraciones 002/005).
 // Zonas activas del seed: Escaleras (29,226,160,178) y Cuarto del bebé (206,226,187,178).
@@ -46,8 +46,10 @@ describe('guardianService', () => {
     service = build(db);
   });
 
-  it('getState devuelve el snapshot sembrado (IDLE, RELIABLE)', () => {
-    expect(service.getState(1)).toEqual({
+  it('getStatus devuelve el snapshot sembrado (IDLE, RELIABLE, sin solicitudes)', () => {
+    expect(service.getStatus(1)).toEqual({
+      robotId: 1,
+      lastRequest: null,
       state: 'IDLE',
       position: { x: 120, y: 90 },
       positionQuality: 'RELIABLE',
@@ -57,11 +59,13 @@ describe('guardianService', () => {
   it('R1.5 AUTHORIZED: actualiza la posición y deja el robot en IDLE (vivacidad)', () => {
     const out = service.move(1, FREE);
     expect(out).toMatchObject({ decision: 'AUTHORIZED', state: 'IDLE', position: FREE });
-    expect(service.getState(1)).toEqual({
-      state: 'IDLE',
-      position: FREE,
-      positionQuality: 'RELIABLE',
-    });
+    expect(service.getStatus(1)).toEqual(
+      expect.objectContaining({
+        state: 'IDLE',
+        position: FREE,
+        positionQuality: 'RELIABLE',
+      }),
+    );
     // Property 9: un segundo movimiento válido también se autoriza (no queda en BUSY).
     expect(service.move(1, { x: 500, y: 150 }).decision).toBe('AUTHORIZED');
   });
@@ -86,7 +90,7 @@ describe('guardianService', () => {
     });
     const detail = createIncidentRepository(db).findById(out.incidentId);
     expect(detail?.zonesSnapshot.length).toBe(2); // Escaleras + Cuarto del bebé.
-    expect(service.getState(1).state).toBe('SAFE_STOP');
+    expect(service.getStatus(1).state).toBe('SAFE_STOP');
   });
 
   it('R5.3 rechazo por estado en SAFE_STOP: NO crea incidente, SÍ registra en audit_log', () => {
@@ -111,7 +115,7 @@ describe('guardianService', () => {
   });
 
   it('R3.1 denegación por datos (UNRELIABLE): DEGRADED + incidente', () => {
-    createRobotRepository(db).saveFull({
+    setRobotState(db, 1, {
       state: 'IDLE',
       position: { x: 120, y: 90 },
       positionQuality: 'UNRELIABLE',
@@ -124,7 +128,7 @@ describe('guardianService', () => {
       collisionType: null,
     });
     expect(createIncidentRepository(db).findAll()).toHaveLength(1);
-    expect(service.getState(1).state).toBe('DEGRADED');
+    expect(service.getStatus(1).state).toBe('DEGRADED');
   });
 
   it('R2.4 repositorio de zonas caído: ZONE_DATA_UNAVAILABLE → SAFE_STOP + incidente', () => {
@@ -151,41 +155,41 @@ describe('guardianService', () => {
         kind: 'ok',
         value: { state: 'IDLE', position: { x: 120, y: 90 }, transitioned: true },
       });
-      expect(service.getState(1).state).toBe('IDLE');
+      expect(service.getStatus(1).state).toBe('IDLE');
       // Tras recuperar, un movimiento válido vuelve a autorizarse.
       expect(service.move(1, FREE).decision).toBe('AUTHORIZED');
     });
 
     it('R4.2 inválido por datos no confiables: permanece en parada sin cambios', () => {
       service.move(1, IN_STAIRS); // → SAFE_STOP.
-      createRobotRepository(db).setPositionQuality('UNRELIABLE');
+      createRobotRepository(db).saveQuality(1, 'UNRELIABLE');
       const out = service.recover(1);
       expect(out).toMatchObject({ kind: 'rejected', code: 'RECOVERY_NOT_ALLOWED' });
-      expect(service.getState(1).state).toBe('SAFE_STOP');
+      expect(service.getStatus(1).state).toBe('SAFE_STOP');
     });
 
     it('R4.2 inválido por posición insegura: permanece en parada sin cambios', () => {
       // Robot dentro de Escaleras y en SAFE_STOP: la recuperación debe rechazarse.
-      createRobotRepository(db).saveFull({
+      setRobotState(db, 1, {
         state: 'SAFE_STOP',
         position: IN_STAIRS,
         positionQuality: 'RELIABLE',
       });
       const out = service.recover(1);
       expect(out).toMatchObject({ kind: 'rejected', code: 'RECOVERY_NOT_ALLOWED' });
-      expect(service.getState(1).state).toBe('SAFE_STOP');
+      expect(service.getStatus(1).state).toBe('SAFE_STOP');
     });
 
     it('R4.5 fuera de parada (IDLE): idempotente, transitioned false y sin efectos', () => {
       const out = service.recover(1);
       expect(out).toMatchObject({ kind: 'ok', value: { transitioned: false } });
-      expect(service.getState(1).state).toBe('IDLE');
+      expect(service.getStatus(1).state).toBe('IDLE');
     });
   });
 
   it('R8.5 setPosition RELIABLE coincidente: fija solo la calidad, sin relocalizar ni cambiar el estado', () => {
     // Primero una calidad perdida (sin pasar por la señal de pérdida, que llevaría a DEGRADED).
-    createRobotRepository(db).setPositionQuality('MISSING');
+    createRobotRepository(db).saveQuality(1, 'MISSING');
     const out = service.setPosition(1, { position: { x: 120, y: 90 }, quality: 'RELIABLE' });
     expect(out).toEqual({
       kind: 'ok',

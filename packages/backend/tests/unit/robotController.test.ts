@@ -9,7 +9,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { createRobotController } from '../../src/controllers/robotController.js';
 import type {
   GuardianService,
-  MoveOutcome,
   PerRobotMoveOutcome,
   PositionOutcome,
 } from '../../src/services/guardianService.js';
@@ -34,10 +33,8 @@ function fakeRes(): Response & { statusCode: number; body: unknown } {
 // Fake del servicio: cada método devuelve lo que la prueba configure.
 function fakeService(overrides: Partial<GuardianService>): GuardianService {
   return {
-    getState: vi.fn(),
     getStatus: vi.fn(),
     move: vi.fn(),
-    moveLegacy: vi.fn(),
     recover: vi.fn(),
     setPosition: vi.fn(),
     checkStartPosition: vi.fn(),
@@ -49,28 +46,15 @@ function fakeService(overrides: Partial<GuardianService>): GuardianService {
 const POS = { x: 10, y: 20 };
 
 describe('robotController — mapeo decisión → HTTP (DD-203)', () => {
-  it('getState → 200 con el estado del servicio', () => {
-    const state: PositionOutcome = { state: 'IDLE', position: POS, positionQuality: 'RELIABLE' };
-    const controller = createRobotController(fakeService({ getState: () => state }));
-    const res = fakeRes();
-    controller.getState({} as Request, res);
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toBe(state);
-  });
+  const params = (robotId: string) => ({ robotId });
+  const command = {
+    destination: POS,
+    sessionId: '5f1c2b3a-4d5e-4f60-8a7b-9c0d1e2f3a4b',
+    sequence: 1,
+  };
 
-  it('move AUTHORIZED → 200', () => {
-    const outcome: MoveOutcome = { decision: 'AUTHORIZED', state: 'IDLE', position: POS };
-    const moveLegacy = vi.fn(() => outcome);
-    const controller = createRobotController(fakeService({ moveLegacy }));
-    const res = fakeRes();
-    controller.move({ body: { destination: POS } } as Request, res);
-    expect(moveLegacy).toHaveBeenCalledWith(1, POS);
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toBe(outcome);
-  });
-
-  it('move DENIED → 200 (la denegación es una decisión válida)', () => {
-    const outcome: MoveOutcome = {
+  it('moveRobot DENIED → 200 (la denegación es una decisión válida)', () => {
+    const outcome: PerRobotMoveOutcome = {
       decision: 'DENIED',
       code: 'RESTRICTED_ZONE_VIOLATION',
       state: 'SAFE_STOP',
@@ -80,30 +64,17 @@ describe('robotController — mapeo decisión → HTTP (DD-203)', () => {
       rule: 'R-ZONA-01',
       zoneName: 'Escaleras',
       reason: 'destination inside restricted zone',
+      robotId: 1,
+      positionQuality: 'RELIABLE',
     };
-    const controller = createRobotController(fakeService({ moveLegacy: () => outcome }));
+    const controller = createRobotController(fakeService({ move: () => outcome }));
     const res = fakeRes();
-    controller.move({ body: { destination: POS } } as Request, res);
+    controller.moveRobot({ params: params('1'), body: command } as unknown as Request, res);
     expect(res.statusCode).toBe(200);
     expect(res.body).toBe(outcome);
   });
 
-  it('move REJECTED → 409 (conflicto de estado)', () => {
-    const outcome: MoveOutcome = {
-      decision: 'REJECTED',
-      code: 'SAFE_STOP_ACTIVE',
-      state: 'SAFE_STOP',
-      position: POS,
-      reason: 'safe stop active',
-    };
-    const controller = createRobotController(fakeService({ moveLegacy: () => outcome }));
-    const res = fakeRes();
-    controller.move({ body: { destination: POS } } as Request, res);
-    expect(res.statusCode).toBe(409);
-    expect(res.body).toBe(outcome);
-  });
-
-  it('recover exitoso → 200 con el RecoverResponse (transitioned)', () => {
+  it('recoverRobot exitoso → 200 con el RecoverResponse (transitioned)', () => {
     const value: RecoverResponse = {
       robotId: 1,
       state: 'IDLE',
@@ -115,12 +86,12 @@ describe('robotController — mapeo decisión → HTTP (DD-203)', () => {
       fakeService({ recover: () => ({ kind: 'ok', value }) }),
     );
     const res = fakeRes();
-    controller.recover({} as Request, res);
+    controller.recoverRobot({ params: params('1') } as unknown as Request, res);
     expect(res.statusCode).toBe(200);
     expect(res.body).toBe(value);
   });
 
-  it('recover rechazado → 409 { code, cause, message } sin estado ni posición', () => {
+  it('recoverRobot rechazado → 409 { code, cause, message } sin estado ni posición', () => {
     const outcome: ServiceResult<RecoverResponse> = {
       kind: 'rejected',
       code: 'RECOVERY_NOT_ALLOWED',
@@ -130,7 +101,7 @@ describe('robotController — mapeo decisión → HTTP (DD-203)', () => {
     };
     const controller = createRobotController(fakeService({ recover: () => outcome }));
     const res = fakeRes();
-    controller.recover({} as Request, res);
+    controller.recoverRobot({ params: params('1') } as unknown as Request, res);
     expect(res.statusCode).toBe(409);
     expect(res.body).toEqual({
       code: 'RECOVERY_NOT_ALLOWED',
@@ -139,7 +110,7 @@ describe('robotController — mapeo decisión → HTTP (DD-203)', () => {
     });
   });
 
-  it('position → 200 con la lectura aportada', () => {
+  it('positionRobot → 200 con la lectura aportada', () => {
     const value: PositionOutcome = {
       state: 'IDLE',
       position: POS,
@@ -149,26 +120,27 @@ describe('robotController — mapeo decisión → HTTP (DD-203)', () => {
     const controller = createRobotController(fakeService({ setPosition }));
     const res = fakeRes();
     const body = { position: POS, quality: 'RELIABLE' as const };
-    controller.position({ body } as Request, res);
+    controller.positionRobot({ params: params('1'), body } as unknown as Request, res);
     expect(setPosition).toHaveBeenCalledWith(1, body);
     expect(res.statusCode).toBe(200);
     expect(res.body).toBe(value);
   });
 
-  it('position rechazada (POSITION_CONFLICT) → 409 { code, message }', () => {
-    const setPosition = vi.fn((): ServiceResult<PositionOutcome> => ({
+  it('positionRobot rechazado con POSITION_CONFLICT → 409 { code, message }', () => {
+    const outcome: ServiceResult<PositionOutcome> = {
       kind: 'rejected',
       code: 'POSITION_CONFLICT',
       status: 409,
-      message: 'Reading does not match the current position',
-    }));
-    const controller = createRobotController(fakeService({ setPosition }));
+      message: 'RELIABLE reading does not match the current position',
+    };
+    const controller = createRobotController(fakeService({ setPosition: () => outcome }));
     const res = fakeRes();
-    controller.position({ body: { position: POS, quality: 'RELIABLE' } } as Request, res);
+    const body = { position: POS, quality: 'RELIABLE' as const };
+    controller.positionRobot({ params: params('1'), body } as unknown as Request, res);
     expect(res.statusCode).toBe(409);
     expect(res.body).toEqual({
       code: 'POSITION_CONFLICT',
-      message: 'Reading does not match the current position',
+      message: 'RELIABLE reading does not match the current position',
     });
   });
 });

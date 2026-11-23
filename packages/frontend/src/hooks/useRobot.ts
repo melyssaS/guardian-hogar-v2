@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, robotsApi, type RobotsApi } from '../api/client';
-import type { MoveResponse, Point, PositionResponse, RecoverResponse, RobotStatus } from '../types';
+import type {
+  MoveCommand,
+  MoveResponse,
+  Point,
+  PositionResponse,
+  RecoverResponse,
+  RobotStatus,
+} from '../types';
 
 export type RobotOperation = 'robot' | 'move' | 'recover' | 'session' | 'signal';
 
@@ -41,6 +48,11 @@ interface SessionState {
 export function useRobot(robotId: number, api: RobotsApi = robotsApi) {
   const [robot, setRobot] = useState<RobotStatus | null>(null);
   const [lastResult, setLastResult] = useState<MoveResponse | null>(null);
+  // Última solicitud enviada y su respuesta, sin transformar (Telemetría, RF-08.7).
+  const [lastExchange, setLastExchange] = useState<{
+    request: MoveCommand;
+    response: MoveResponse;
+  } | null>(null);
   const [lastRecover, setLastRecover] = useState<RecoverResponse | null>(null);
   const [lastSignal, setLastSignal] = useState<PositionResponse | null>(null);
   const [status, setStatus] = useState<Record<RobotOperation, OperationState>>({
@@ -74,6 +86,7 @@ export function useRobot(robotId: number, api: RobotsApi = robotsApi) {
     latest.current = null;
     setRobot(null);
     setLastResult(null);
+    setLastExchange(null);
     setLastRecover(null);
     setLastSignal(null);
     void refresh();
@@ -105,12 +118,14 @@ export function useRobot(robotId: number, api: RobotsApi = robotsApi) {
           sessions.current.set(robotId, session);
         }
         session.sequence += 1;
-        const result = await api.move(robotId, {
+        const command: MoveCommand = {
           destination,
           sessionId: session.sessionId,
           sequence: session.sequence,
-        });
+        };
+        const result = await api.move(robotId, command);
         setLastResult(result);
+        setLastExchange({ request: command, response: result });
         setOp('move', idle);
         await refresh();
         return result;
@@ -166,6 +181,7 @@ export function useRobot(robotId: number, api: RobotsApi = robotsApi) {
   return {
     robot,
     lastResult,
+    lastExchange,
     lastRecover,
     lastSignal,
     status,

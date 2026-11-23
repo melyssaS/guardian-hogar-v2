@@ -6,25 +6,15 @@ import type { Db } from '../../src/db/connection.js';
 import { seedDefaultRooms } from '../../src/db/seed.js';
 import { createTestDb } from '../helpers.js';
 
-// Spec 002 — tarea 15. Prueba de cableado mínima de /api/robot y /api/incidents (§6, §8.1).
-// La batería completa de integración es la tarea 23; aquí solo se verifica el montaje.
-describe('API /api/robot — cableado (spec 002 §6)', () => {
+// Spec 002 — tarea 15. Prueba de cableado mínima de /api/incidents (§8.1). [RC-20] `/api/robot/*`
+// se retiró: el cableado de las rutas por robot se prueba en el describe siguiente.
+describe('API /api/incidents — cableado (spec 002 §8.1)', () => {
   let db: Db;
   let app: Express;
   beforeEach(() => {
     db = createTestDb();
     seedDefaultRooms(db);
     app = createApp(db, { corsOrigins: ['http://localhost:5173'] });
-  });
-
-  it('GET /api/robot/state responde 200 con { state, position, positionQuality }', async () => {
-    const res = await request(app).get('/api/robot/state');
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({
-      state: 'IDLE',
-      position: { x: 120, y: 90 },
-      positionQuality: 'RELIABLE',
-    });
   });
 
   it('GET /api/incidents responde 200 con un arreglo', async () => {
@@ -34,10 +24,10 @@ describe('API /api/robot — cableado (spec 002 §6)', () => {
   });
 });
 
-// Spec 002 — RC-17b (R10.6, R12.3, R5.6; decisión 2): montaje ADITIVO en `app.ts`, solo en la rama de
-// trabajo. `/api/robots` (catálogo, sesiones y rutas por robot) y el `/api/incidents` nuevo
-// responden junto a `/api/simulation/*` y `/api/robot/*`, que siguen operativos hasta RC-20.
-describe('app.ts — montaje aditivo de /api/robots (spec 002 RC-17b)', () => {
+// Spec 002 — RC-17b/RC-20 (R10.1, R12.3, R5.6): `app.ts` monta solo lo vigente. `/api/robots`
+// (catálogo, sesiones y rutas por robot), el `/api/incidents` nuevo y `/api/zones`; las rutas
+// antiguas (`/api/simulation/*`, `/api/robot/*`) se retiraron (singleGuardian.test.ts, RC-18).
+describe('app.ts — montaje de /api/robots (spec 002 RC-17b, RC-20)', () => {
   let db: Db;
   let app: Express;
   beforeEach(() => {
@@ -104,25 +94,8 @@ describe('app.ts — montaje aditivo de /api/robots (spec 002 RC-17b)', () => {
     expect((await request(app).get('/api/incidents').query({ robotId: 99 })).status).toBe(404);
   });
 
-  it('las rutas antiguas siguen operativas junto a las nuevas', async () => {
-    expect((await request(app).get('/api/simulation/robot')).status).toBe(200);
-    expect((await request(app).get('/api/robot/state')).status).toBe(200);
-    const legacyMove = await request(app)
-      .post('/api/simulation/move')
-      .send({ destination: { x: 450, y: 120 } });
-    expect(legacyMove.status).toBe(200);
+  it('las rutas de zonas y su registro de cambios siguen montadas (spec 001)', async () => {
     expect((await request(app).get('/api/zones')).status).toBe(200);
-  });
-
-  it('un único estado: el robot movido por la ruta antigua se ve en la nueva (mismo vigilante)', async () => {
-    const legacy = await request(app).post('/api/robot/move').send({ destination: IN_STAIRS });
-    expect(legacy.body).toMatchObject({ decision: 'DENIED' });
-    const state = await request(app).get('/api/robots/1/state');
-    expect(state.body).toMatchObject({ state: 'SAFE_STOP', position: { x: 120, y: 90 } });
-    // El incidente de la ruta antigua se lista en el contrato nuevo con su robot.
-    const incidents = await request(app).get('/api/incidents');
-    expect(incidents.body).toHaveLength(1);
-    expect(incidents.body[0]).toMatchObject({ robotId: 1, rule: 'R-ZONA-01' });
   });
 
   it('una ruta desconocida bajo /api sigue respondiendo 404 NOT_FOUND', async () => {

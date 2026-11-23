@@ -30,14 +30,11 @@ export const zoneOutOfBounds = () =>
 
 export const validationError = (message: string) => new AppError(422, 'VALIDATION_ERROR', message);
 
-// Spec 003 — catálogo de errores de /api/simulation
+// Spec 003 — destino fuera del plano (lo emite el servicio; DD-107)
 export const destinationOutOfBounds = () =>
   new AppError(422, 'DESTINATION_OUT_OF_BOUNDS', 'Destination outside floor');
 
-export const invalidDestination = (message: string) =>
-  new AppError(422, 'INVALID_DESTINATION', message);
-
-// Spec 002 — payload inválido de /api/robot/position (design §7, mapeo decisión → HTTP)
+// Spec 002 — payload inválido de POST /api/robots/:robotId/position (design §7, mapeo decisión → HTTP)
 export const invalidPosition = (message: string) => new AppError(422, 'INVALID_POSITION', message);
 
 // Spec 003 RF-07 — catálogo de robots

@@ -9,7 +9,9 @@ import {
 import { DecisionPanel } from '../components/DecisionPanel';
 import { FloorPlan } from '../components/FloorPlan';
 import { QUALITY_PILL, STATE_PILL } from '../components/pills';
+import { TelemetryPanel } from '../components/TelemetryPanel';
 import { Toast } from '../components/Toast';
+import { useIncidents } from '../hooks/useIncidents';
 import { useRobot } from '../hooks/useRobot';
 import { useRobots } from '../hooks/useRobots';
 import { useZones } from '../hooks/useZones';
@@ -25,6 +27,12 @@ function requestedRobotId(): number {
   return Number.isInteger(id) && id > 0 ? id : DEFAULT_ROBOT_ID;
 }
 
+/** Zona del catálogo que el prototipo usa para probar la parada preventiva. */
+const STAIRS_ZONE_NAME = 'Escaleras';
+/** Reglas cuyos incidentes son decisiones de parada del vigilante (DD-128). */
+const STOP_RULES: readonly string[] = ['R-ZONA-01', 'R-DATA-01'];
+const SIGNAL_RULE = 'R-SIGNAL-01';
+
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 /**
@@ -34,13 +42,14 @@ const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 export function SimulationPage() {
   const { zones, status: zoneStatus } = useZones();
   const { robots, status: listStatus, refresh: refreshRobots } = useRobots();
+  const { incidents, status: incidentStatus, refresh: refreshIncidents } = useIncidents();
   const [selectedId, setSelectedId] = useState(requestedRobotId);
   // Si el id pedido no está en el catálogo, se cae al primer robot de la lista.
   useEffect(() => {
     const first = robots[0];
     if (first && !robots.some((r) => r.id === selectedId)) setSelectedId(first.id);
   }, [robots, selectedId]);
-  const { robot, lastResult, status, move, recover, loseSignal, restoreSignal } =
+  const { robot, lastResult, lastExchange, status, move, recover, loseSignal, restoreSignal } =
     useRobot(selectedId);
   const [draft, setDraft] = useState<CoordDraft>(emptyDraft);
   const [toast, setToast] = useState<{ text: string; seq: number } | null>(null);
@@ -48,7 +57,11 @@ export function SimulationPage() {
 
   const destination = parseDestination(draft).point;
   const busy = status.move.loading || status.recover.loading || status.signal.loading || !robot;
-  const loadError = status.robot.error ?? listStatus.list.error ?? zoneStatus.list.error;
+  const loadError =
+    status.robot.error ??
+    listStatus.list.error ??
+    zoneStatus.list.error ??
+    incidentStatus.list.error;
   const actionError = status.move.error ?? status.recover.error ?? status.signal.error;
 
   // El plano pinta todos los robots; el seleccionado usa el estado más reciente de la API.
@@ -57,11 +70,47 @@ export function SimulationPage() {
   );
   const selected = robots.find((r) => r.id === selectedId);
 
+  // Indicadores (RF-10.3): todos derivan de lo que devuelve la API; la UI no lleva contadores.
+  const activeRobots = planRobots.filter(
+    (r) => r.state !== 'SAFE_STOP' && r.state !== 'DEGRADED',
+  ).length;
+  const stopDecisions = incidents.filter((i) => STOP_RULES.includes(i.rule)).length;
+  const signalLosses = incidents.filter((i) => i.rule === SIGNAL_RULE).length;
+  const requestsProcessed = robot?.lastRequest?.sequence ?? 0;
+  const restrictedZones = zones.filter((z) => z.active).length;
+
   /** Tras cada acción se vuelve a pedir la lista para que el plano refleje a todos los robots. */
   const act = async <T,>(action: () => Promise<T>): Promise<T> => {
     const result = await action();
-    await refreshRobots();
+    await Promise.all([refreshRobots(), refreshIncidents()]);
     return result;
+  };
+
+  // La zona se busca por nombre en lo que devuelve la API. Solo se declara "inexistente" cuando
+  // las zonas ya cargaron sin error: mientras cargan (o si fallan) el botón no se bloquea.
+  const stairs = zones.find((z) => z.name === STAIRS_ZONE_NAME);
+  const stairsMissing = !zoneStatus.list.loading && !zoneStatus.list.error && !stairs;
+  const stairsMissingNotice = `No existe la zona «${STAIRS_ZONE_NAME}»; créela en Zonas y reglas`;
+
+  /**
+   * "⚠ Enviar a escaleras" (RF-10.4, DD-115): el destino es el centro de la zona leída de la API.
+   * No evalúa colisiones: solo envía el destino y muestra la decisión del vigilante.
+   */
+  const handleStairs = async () => {
+    if (zoneStatus.list.error) {
+      notify('No se pudieron leer las zonas; reintente');
+      return;
+    }
+    if (!stairs?.active) {
+      notify('Escaleras está permitida; restrínjala antes de probar la parada');
+      return;
+    }
+    await act(() =>
+      move({
+        x: Math.round(stairs.x + stairs.width / 2),
+        y: Math.round(stairs.y + stairs.height / 2),
+      }),
+    );
   };
 
   const handleRecover = async () => {
@@ -125,6 +174,44 @@ export function SimulationPage() {
           </div>
         )}
 
+        <div className="kpis">
+          <div className="card kpi">
+            <div className="kpi-top">Robots activos</div>
+            <div className="kpi-val" data-testid="kpi-active">
+              {activeRobots}
+            </div>
+            <div className="kpi-note">Sin parada ni señal perdida</div>
+          </div>
+          <div className="card kpi">
+            <div className="kpi-top">Decisiones de parada</div>
+            <div className="kpi-val" data-testid="kpi-stops">
+              {stopDecisions}
+            </div>
+            <div className="kpi-note">Reglas R-ZONA-01 y R-DATA-01</div>
+          </div>
+          <div className="card kpi">
+            <div className="kpi-top">Pérdidas de señal</div>
+            <div className="kpi-val" data-testid="kpi-signals">
+              {signalLosses}
+            </div>
+            <div className="kpi-note">Regla R-SIGNAL-01</div>
+          </div>
+          <div className="card kpi">
+            <div className="kpi-top">Solicitudes procesadas</div>
+            <div className="kpi-val" data-testid="kpi-requests">
+              {requestsProcessed}
+            </div>
+            <div className="kpi-note">Del robot seleccionado</div>
+          </div>
+          <div className="card kpi">
+            <div className="kpi-top">Zonas restringidas</div>
+            <div className="kpi-val" data-testid="kpi-zones">
+              {restrictedZones}
+            </div>
+            <div className="kpi-note">Zonas activas</div>
+          </div>
+        </div>
+
         <div className="two">
           <section className="card pad">
             <div className="section-heading">
@@ -179,6 +266,15 @@ export function SimulationPage() {
             <div className="controls">
               <button
                 type="button"
+                className="btn danger tight"
+                disabled={busy || stairsMissing}
+                title={stairsMissing ? stairsMissingNotice : undefined}
+                onClick={() => void handleStairs()}
+              >
+                ⚠ Enviar a escaleras
+              </button>
+              <button
+                type="button"
                 className="btn tight"
                 disabled={busy}
                 onClick={() => void act(loseSignal)}
@@ -194,6 +290,11 @@ export function SimulationPage() {
                 ↻ Recuperar señal
               </button>
             </div>
+            {stairsMissing && (
+              <p className="note-line" data-testid="stairs-missing">
+                {stairsMissingNotice}
+              </p>
+            )}
             <div className="controls reserved">
               <button
                 type="button"
@@ -261,6 +362,10 @@ export function SimulationPage() {
             </section>
 
             <DecisionPanel result={lastResult} />
+            <TelemetryPanel
+              request={lastExchange?.request ?? null}
+              response={lastExchange?.response ?? null}
+            />
           </div>
         </div>
 

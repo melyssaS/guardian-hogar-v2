@@ -11,32 +11,39 @@ import { createTestDb } from '../helpers.js';
 // RELIABLE coincidente restablece la calidad (nunca relocaliza), y tras `recover` el movimiento a
 // destino libre se AUTORIZA (R8.1, R8.3).
 //
-// Cadena demostrada contra los endpoints reales (/api/robot §6):
+// Cadena demostrada contra los endpoints reales (/api/robots/1, A1; §6; en RC-20 sustituyen a /api/robot):
 //   1. estado base: IDLE, (120,90), RELIABLE
 //   2. POST /position { MISSING } → 200, DEGRADED, calidad MISSING e incidente R-SIGNAL-01
 //   3. con el robot en DEGRADED el move se rechaza por estado (409 SAFE_STOP_ACTIVE)
 //   4. POST /position { RELIABLE } coincidente → solo calidad; no coincidente → 409 POSITION_CONFLICT
 //   5. POST /recover → IDLE (posición segura + RELIABLE)
 //   6. move a destino libre → AUTHORIZED, IDLE, robot en el destino: no hay bloqueo permanente.
-describe('API /api/robot — habilitación por lectura de posición (PD-09)', () => {
+describe('API /api/robots/1 — habilitación por lectura de posición (PD-09)', () => {
   let db: Db;
   let app: Express;
-  beforeEach(() => {
+  let sessionId: string;
+  let sequence: number;
+  beforeEach(async () => {
     db = createTestDb();
     seedDefaultRooms(db);
     app = createApp(db, { corsOrigins: ['http://localhost:5173'] });
+    sessionId = (await request(app).post('/api/robots/1/sessions')).body.sessionId;
+    sequence = 0;
   });
 
-  const state = () => request(app).get('/api/robot/state');
-  const move = (body: unknown) =>
-    request(app)
-      .post('/api/robot/move')
-      .send(body as object);
+  const state = () => request(app).get('/api/robots/1/state');
+  // `move` añade la sesión vigente y una secuencia creciente (spec 002 R11).
+  const move = (body: object) => {
+    sequence += 1;
+    return request(app)
+      .post('/api/robots/1/move')
+      .send({ ...body, sessionId, sequence });
+  };
   const position = (body: unknown) =>
     request(app)
-      .post('/api/robot/position')
+      .post('/api/robots/1/position')
       .send(body as object);
-  const recover = () => request(app).post('/api/robot/recover');
+  const recover = () => request(app).post('/api/robots/1/recover');
   const audit = () =>
     db.prepare('SELECT robot_id, event_code, state FROM audit_log ORDER BY id').all();
 
@@ -46,7 +53,7 @@ describe('API /api/robot — habilitación por lectura de posición (PD-09)', ()
 
   it('R8.3 / Property 10: tras la pérdida, una lectura RELIABLE coincidente y recover, un move a destino libre se autoriza', async () => {
     // 1. Estado base: el seed deja RELIABLE/IDLE en (120,90).
-    expect((await state()).body).toEqual({
+    expect((await state()).body).toMatchObject({
       state: 'IDLE',
       position: ORIGIN,
       positionQuality: 'RELIABLE',
@@ -88,7 +95,7 @@ describe('API /api/robot — habilitación por lectura de posición (PD-09)', ()
     const conflict = await position({ position: FREE_DESTINATION, quality: 'RELIABLE' });
     expect(conflict.status).toBe(409);
     expect(conflict.body).toEqual({ code: 'POSITION_CONFLICT', message: expect.any(String) });
-    expect((await state()).body).toEqual({
+    expect((await state()).body).toMatchObject({
       state: 'DEGRADED',
       position: ORIGIN,
       positionQuality: 'MISSING',
@@ -129,8 +136,10 @@ describe('API /api/robot — habilitación por lectura de posición (PD-09)', ()
       decision: 'AUTHORIZED',
       state: 'IDLE',
       position: FREE_DESTINATION,
+      robotId: 1,
+      positionQuality: 'RELIABLE',
     });
-    expect((await state()).body).toEqual({
+    expect((await state()).body).toMatchObject({
       state: 'IDLE',
       position: FREE_DESTINATION,
       positionQuality: 'RELIABLE',

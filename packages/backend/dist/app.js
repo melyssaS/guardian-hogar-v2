@@ -7,7 +7,6 @@ import { createAuditLogRepository } from './repositories/auditLogRepository.js';
 import { createIncidentRepository } from './repositories/incidentRepository.js';
 import { createMovementLogRepository } from './repositories/movementLogRepository.js';
 import { createRobotRepository } from './repositories/robotRepository.js';
-import { createTransitionLogRepository } from './repositories/transitionLogRepository.js';
 import { createZoneRepository } from './repositories/zoneRepository.js';
 import { createIncidentRoutes } from './routes/incidentRoutes.js';
 import { createRobotRoutes } from './routes/robotRoutes.js';
@@ -54,7 +53,6 @@ export function createApp(db, options = {}) {
         robots: createRobotRepository(db),
         incidents: incidentRepository,
         audit: createAuditLogRepository(db),
-        transitions: createTransitionLogRepository(db),
         getActiveZones: () => zoneRepository.findAll('active'),
         runInTransaction: (fn) => db.transaction(fn)(),
     });

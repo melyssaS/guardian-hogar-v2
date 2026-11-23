@@ -51,21 +51,25 @@ describe('Vivacidad del movimiento', () => {
     // Primer movimiento: autorizado y el robot queda en IDLE (MOVING transitorio → completeMove).
     const first = service.move(1, DEST_A);
     expect(first).toMatchObject({ decision: 'AUTHORIZED', state: 'IDLE', position: DEST_A });
-    expect(service.getState(1)).toEqual({
-      state: 'IDLE',
-      position: DEST_A,
-      positionQuality: 'RELIABLE',
-    });
+    expect(service.getStatus(1)).toEqual(
+      expect.objectContaining({
+        state: 'IDLE',
+        position: DEST_A,
+        positionQuality: 'RELIABLE',
+      }),
+    );
 
     // Segundo movimiento inmediato: también autorizado. Si el primero hubiese dejado el robot
     // atascado en MOVING, este sería rechazado con BUSY; la vivacidad lo impide.
     const second = service.move(1, DEST_B);
     expect(second).toMatchObject({ decision: 'AUTHORIZED', state: 'IDLE', position: DEST_B });
-    expect(service.getState(1)).toEqual({
-      state: 'IDLE',
-      position: DEST_B,
-      positionQuality: 'RELIABLE',
-    });
+    expect(service.getStatus(1)).toEqual(
+      expect.objectContaining({
+        state: 'IDLE',
+        position: DEST_B,
+        positionQuality: 'RELIABLE',
+      }),
+    );
   });
 
   it('un tercer movimiento válido refuerza la vivacidad: sin BUSY ni SAFE_STOP en la cadena', () => {
@@ -80,11 +84,13 @@ describe('Vivacidad del movimiento', () => {
     expect(outcomes.some((out) => out.state === 'SAFE_STOP')).toBe(false);
 
     // Estado final consistente con el último destino y sin atasco.
-    expect(service.getState(1)).toEqual({
-      state: 'IDLE',
-      position: DEST_C,
-      positionQuality: 'RELIABLE',
-    });
+    expect(service.getStatus(1)).toEqual(
+      expect.objectContaining({
+        state: 'IDLE',
+        position: DEST_C,
+        positionQuality: 'RELIABLE',
+      }),
+    );
   });
 
   it('mecanismo puro: completeMove("MOVING") === "IDLE" (DD-209)', () => {

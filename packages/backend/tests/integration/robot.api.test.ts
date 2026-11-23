@@ -19,22 +19,32 @@ import { createTestDb } from '../helpers.js';
  *
  * Las aserciones reflejan las formas reales que produce `guardianService` y que `robotController`
  * deja pasar sin transformar (AUTHORIZED/DENIED → 200, REJECTED → 409, payload inválido → 422).
+ *
+ * [RC-20] Tras la retirada de `/api/robot/*`, el mismo contrato se ejercita por la API por robot
+ * (`/api/robots/1/*`, A1) sobre la app completa y con una sesión vigente; `move` añade la sesión
+ * y una secuencia creciente al cuerpo.
  */
-describe('API /api/robot', () => {
+describe('API /api/robots/1 (vigilante de A1, app completa)', () => {
   let db: Db;
   let app: Express;
-  beforeEach(() => {
+  let sessionId: string;
+  let sequence: number;
+  beforeEach(async () => {
     db = createTestDb();
     seedDefaultRooms(db);
     app = createApp(db, { corsOrigins: ['http://localhost:5173'] });
+    sessionId = (await request(app).post('/api/robots/1/sessions')).body.sessionId;
+    sequence = 0;
   });
 
-  const move = (body: unknown) =>
-    request(app)
-      .post('/api/robot/move')
-      .send(body as object);
-  const state = () => request(app).get('/api/robot/state');
-  const recover = () => request(app).post('/api/robot/recover');
+  const move = (body: object) => {
+    sequence += 1;
+    return request(app)
+      .post('/api/robots/1/move')
+      .send({ ...body, sessionId, sequence });
+  };
+  const state = () => request(app).get('/api/robots/1/state');
+  const recover = () => request(app).post('/api/robots/1/recover');
   const incidents = () => request(app).get('/api/incidents');
 
   // ── Estado ────────────────────────────────────────────────────────────────
@@ -43,9 +53,11 @@ describe('API /api/robot', () => {
       const res = await state();
       expect(res.status).toBe(200);
       expect(res.body).toEqual({
+        robotId: 1,
         state: 'IDLE',
         position: { x: 120, y: 90 },
         positionQuality: 'RELIABLE',
+        lastRequest: null,
       });
     });
   });
@@ -59,9 +71,11 @@ describe('API /api/robot', () => {
         decision: 'AUTHORIZED',
         state: 'IDLE',
         position: { x: 450, y: 120 },
+        robotId: 1,
+        positionQuality: 'RELIABLE',
       });
       // GET /state confirma la persistencia: IDLE en (450, 120), listo para el siguiente move.
-      expect((await state()).body).toEqual({
+      expect((await state()).body).toMatchObject({
         state: 'IDLE',
         position: { x: 450, y: 120 },
         positionQuality: 'RELIABLE',
@@ -85,7 +99,7 @@ describe('API /api/robot', () => {
       expect(typeof res.body.incidentId).toBe('number');
       expect(res.body.incidentId).toBeGreaterThan(0);
       // R3.3: la posición no cambia y el estado queda en parada.
-      expect((await state()).body).toEqual({
+      expect((await state()).body).toMatchObject({
         state: 'SAFE_STOP',
         position: { x: 120, y: 90 },
         positionQuality: 'RELIABLE',
@@ -133,9 +147,11 @@ describe('API /api/robot', () => {
         state: 'SAFE_STOP',
         position: { x: 120, y: 90 },
         reason: expect.any(String),
+        robotId: 1,
+        positionQuality: 'RELIABLE',
       });
       // El estado y la posición no cambian por el rechazo.
-      expect((await state()).body).toEqual({
+      expect((await state()).body).toMatchObject({
         state: 'SAFE_STOP',
         position: { x: 120, y: 90 },
         positionQuality: 'RELIABLE',
@@ -149,12 +165,12 @@ describe('API /api/robot', () => {
   // ── Move: 422 payload inválido ──────────────────────────────────────────────
   describe('POST /move — 422 payload inválido', () => {
     it.each([[{}], [{ destination: { x: '1', y: 2 } }], [{ destination: { x: 1 } }]])(
-      'rechaza con INVALID_DESTINATION el payload %j (validate/Zod)',
+      'rechaza con INVALID_MOVE_REQUEST el payload %j (validate/Zod)',
       async (body) => {
         const res = await move(body);
         expect(res.status).toBe(422);
         expect(res.body).toEqual({
-          code: 'INVALID_DESTINATION',
+          code: 'INVALID_MOVE_REQUEST',
           message: expect.any(String),
         });
       },
@@ -168,7 +184,7 @@ describe('API /api/robot', () => {
         message: expect.any(String),
       });
       // El robot no cambia tras un payload fuera de límites.
-      expect((await state()).body).toEqual({
+      expect((await state()).body).toMatchObject({
         state: 'IDLE',
         position: { x: 120, y: 90 },
         positionQuality: 'RELIABLE',
@@ -177,7 +193,7 @@ describe('API /api/robot', () => {
 
     it('JSON mal formado → 400 sin exponer stack trace', async () => {
       const res = await request(app)
-        .post('/api/robot/move')
+        .post('/api/robots/1/move')
         .set('Content-Type', 'application/json')
         .send('{bad');
       expect(res.status).toBe(400);
@@ -201,7 +217,7 @@ describe('API /api/robot', () => {
         positionQuality: 'RELIABLE',
         transitioned: true,
       });
-      expect((await state()).body).toEqual({
+      expect((await state()).body).toMatchObject({
         state: 'IDLE',
         position: { x: 120, y: 90 },
         positionQuality: 'RELIABLE',
@@ -223,7 +239,7 @@ describe('API /api/robot', () => {
         transitioned: false,
       });
       // Sin efectos: el estado permanece IDLE en la misma posición.
-      expect((await state()).body).toEqual({
+      expect((await state()).body).toMatchObject({
         state: 'IDLE',
         position: { x: 120, y: 90 },
         positionQuality: 'RELIABLE',
@@ -245,15 +261,20 @@ describe('API /api/robot', () => {
         cause: 'UNSAFE_POSITION',
         message: expect.any(String),
       });
-      expect((await state()).body).toEqual({
+      expect((await state()).body).toMatchObject({
         state: 'SAFE_STOP',
         position: { x: 100, y: 300 },
         positionQuality: 'RELIABLE',
       });
       // La fila se lee DESPUÉS de la respuesta 409: el rechazo quedó confirmado.
-      expect(db.prepare('SELECT robot_id, event_code, state FROM audit_log').all()).toEqual([
-        { robot_id: 1, event_code: 'RECOVERY_NOT_ALLOWED', state: 'SAFE_STOP' },
-      ]);
+      // (la sesión que abre cada prueba deja su propia fila SESSION_STARTED, que se descarta).
+      expect(
+        db
+          .prepare(
+            "SELECT robot_id, event_code, state FROM audit_log WHERE event_code <> 'SESSION_STARTED'",
+          )
+          .all(),
+      ).toEqual([{ robot_id: 1, event_code: 'RECOVERY_NOT_ALLOWED', state: 'SAFE_STOP' }]);
     });
 
     it('calidad no confiable: cause UNRELIABLE_DATA', async () => {

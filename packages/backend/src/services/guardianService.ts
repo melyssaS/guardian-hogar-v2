@@ -136,8 +136,6 @@ export interface PositionOutcome {
 }
 
 export interface GuardianService {
-  /** Estado, posición y calidad de posición actuales del robot. */
-  getState(robotId: RobotId): PositionOutcome;
   /** Estado completo por robot, con la última solicitud aceptada (`GET .../state`, R12.3). */
   getStatus(robotId: RobotId): RobotStatus;
   /**
@@ -146,12 +144,6 @@ export interface GuardianService {
    * supera la secuencia la consume, decida lo que decida el vigilante.
    */
   move(robotId: RobotId, cmd: MoveCommand): PerRobotMoveOutcome | MoveSessionRejection;
-  /**
-   * Vía TEMPORAL sin sesión ni secuencia para el controller antiguo de `/api/robot/move`
-   * (decisión 2, desvío declarado de R11): mismo vigilante, sin `acceptRequest`. Solo la usan
-   * `robotController` (handler legacy) y sus pruebas; RC-20 la retira (R10.7).
-   */
-  moveLegacy(robotId: RobotId, destination: Point): MoveOutcome;
   /** Recuperación explícita y validada (R4); un rechazo es un resultado, no una excepción. */
   recover(robotId: RobotId): RecoverOutcome;
   /**
@@ -216,7 +208,7 @@ export function createGuardianService(deps: GuardianServiceDeps): GuardianServic
   }
 
   /**
-   * Núcleo común de `move` y `moveLegacy` (pasos 5-6 del design §4): evalúa con el vigilante y
+   * Núcleo de `move` (pasos 5-6 del design §4): evalúa con el vigilante y
    * aplica la transición. Corre dentro de la transacción del llamador. `requestDetail` (sesión y
    * secuencia) se añade al `detail` de T1 (R9.2).
    */
@@ -325,11 +317,6 @@ export function createGuardianService(deps: GuardianServiceDeps): GuardianServic
   }
 
   return {
-    getState(robotId) {
-      const { state, position, positionQuality } = requireStatus(robotId);
-      return { state, position, positionQuality };
-    },
-
     getStatus(robotId) {
       const { state, position, positionQuality } = requireStatus(robotId);
       return {
@@ -354,14 +341,6 @@ export function createGuardianService(deps: GuardianServiceDeps): GuardianServic
           sequence: cmd.sequence,
         });
         return { ...outcome, robotId, positionQuality: status.positionQuality };
-      });
-    },
-
-    moveLegacy(robotId, destination) {
-      return runInTransaction(() => {
-        const status = requireStatus(robotId);
-        assertDestinationWithinFloor(destination);
-        return evaluateAndApply(robotId, status, destination, {});
       });
     },
 

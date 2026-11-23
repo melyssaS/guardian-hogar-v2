@@ -1,4 +1,4 @@
-import type { Point, RobotId } from '@home-guardian/domain';
+import type { Point, PositionQuality, RobotId, RobotStateName } from '@home-guardian/domain';
 import { randomUUID } from 'node:crypto';
 import { copyFileSync, mkdtempSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -48,6 +48,31 @@ export function readMovementLog(db: Db): Array<Record<string, unknown>> {
        FROM movement_log ORDER BY id`,
     )
     .all() as Array<Record<string, unknown>>;
+}
+
+/** Fotografía del estado de un robot, sin su id (lo que fijan y leen las pruebas del vigilante). */
+export interface RobotStateSnapshot {
+  state: RobotStateName;
+  position: Point;
+  positionQuality: PositionQuality;
+}
+
+/** Siembra directa de `robot_state` (estado, posición y calidad) de un robot, sin transiciones. */
+export function setRobotState(db: Db, robotId: RobotId, snapshot: RobotStateSnapshot): void {
+  const robots = createRobotRepository(db);
+  robots.saveState(robotId, snapshot.state, snapshot.position);
+  robots.saveQuality(robotId, snapshot.positionQuality);
+}
+
+/** Lee el estado de un robot tal como está persistido. */
+export function getRobotState(db: Db, robotId: RobotId): RobotStateSnapshot {
+  const status = createRobotRepository(db).getStatus(robotId);
+  if (!status) throw new Error(`robot ${robotId} has no robot_state row`);
+  return {
+    state: status.state,
+    position: status.position,
+    positionQuality: status.positionQuality,
+  };
 }
 
 export const stairs = { name: 'Escaleras', x: 100, y: 100, width: 200, height: 150, active: true };

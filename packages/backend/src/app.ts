@@ -6,7 +6,6 @@ import type { Db } from './db/connection.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 import { createAuditLogRepository } from './repositories/auditLogRepository.js';
 import { createIncidentRepository } from './repositories/incidentRepository.js';
-import { createMovementLogRepository } from './repositories/movementLogRepository.js';
 import { createRobotCatalogRepository } from './repositories/robotCatalogRepository.js';
 import { createRobotRepository } from './repositories/robotRepository.js';
 import { createSessionRepository } from './repositories/sessionRepository.js';
@@ -15,12 +14,9 @@ import { createZoneChangeLogRepository } from './repositories/zoneChangeLogRepos
 import { createZoneRepository } from './repositories/zoneRepository.js';
 import { createGuardianRoutes } from './routes/guardianRoutes.js';
 import { createIncidentRoutes } from './routes/incidentRoutes.js';
-import { createRobotRoutes } from './routes/robotRoutes.js';
 import { createRobotsRoutes } from './routes/robotsRoutes.js';
-import { createSimulationRoutes } from './routes/simulationRoutes.js';
 import { createZoneRoutes } from './routes/zoneRoutes.js';
 import { createGuardianService } from './services/guardianService.js';
-import { createMovementService } from './services/movementService.js';
 import { createRobotCatalogService } from './services/robotCatalogService.js';
 import { createSessionService } from './services/sessionService.js';
 import { createZoneService } from './services/zoneService.js';
@@ -73,14 +69,6 @@ export function createApp(db: Db, options: AppOptions = {}): Express {
     ),
   );
 
-  const movementService = createMovementService({
-    robots: createRobotRepository(db),
-    movementLog: createMovementLogRepository(db),
-    getActiveZones: () => zoneRepository.findAll('active'),
-    runInTransaction: (fn) => db.transaction(fn)(),
-  });
-  app.use('/api/simulation', createSimulationRoutes(movementService));
-
   // HU-04/HU-05 — vigilante de seguridad (spec 002 §6, §8.1). Inyección manual de
   // repositorios en el servicio (SOLID-D); comparte las zonas activas con el resto de la app.
   const incidentRepository = createIncidentRepository(db);
@@ -101,11 +89,9 @@ export function createApp(db: Db, options: AppOptions = {}): Express {
     getActiveZones: () => zoneRepository.findAll('active'),
     runInTransaction: (fn) => db.transaction(fn)(),
   });
-  app.use('/api/robot', createRobotRoutes(guardianService));
-
-  // [RC-01 · montaje ADITIVO, RC-17b] Catálogo, sesiones y rutas por robot junto a las antiguas
-  // `/api/simulation` y `/api/robot`, solo mientras dure la rama de trabajo (se retiran en RC-20).
-  // `robotsRoutes` es la dueña única de `/sessions`; `guardianRoutes` monta debajo de `:robotId`.
+  // Catálogo, sesiones y rutas por robot (R10.1): únicas vías de cambio de estado. `robotsRoutes`
+  // es la dueña única de `/sessions`; `guardianRoutes` monta debajo de `:robotId`. Las rutas
+  // `/api/simulation/*` y `/api/robot/*` ya no existen y caen en el 404 de `/api` (R10.2).
   const robotCatalogService = createRobotCatalogService({
     catalog: createRobotCatalogRepository(db),
     robots: robotRepository,

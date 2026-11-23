@@ -3,7 +3,7 @@
 **Fase MADA:** DISEÑAR
 **HU cubiertas:** HU-02 del backlog del prototipo; el plano («HU-01» en esta spec) es soporte de
 HU-02/HU-03 **[RC-01]** (ver nota de numeración en `requirements.md`).
-**Estado:** Aprobado (2026-11-23) en lo implementado; refuerzo RC-01 (incluida la rev2) pendiente de aprobación humana **[RC-01 rev2]**
+**Estado:** Aprobado (2026-11-23) en lo implementado; refuerzo RC-01 (incluidas la rev2 a la rev6) pendiente de aprobación humana **[RC-01 rev2]** **[RC-01 rev3]** **[RC-01 rev4]** **[RC-01 rev5]** **[RC-01 rev6]**
 > Estado anterior: «Borrador — implementado; refuerzo RC-01 pendiente de aprobación humana».
 
 > Define la **arquitectura y los contratos técnicos**. Depende de `requirements.md` aprobado.
@@ -258,7 +258,9 @@ export const RULES: readonly Rule[] = [
 /** Pura. Devuelve la regla que cubre un código de denegación, o null (RF-06.2). */
 // [RC-01 rev2] Única definición del sistema (I-5). Acepta también el código del incidente de
 // pérdida de señal (Q-B), que no es un DecisionCode del vigilante.
-export function ruleForDecision(code: DecisionCode | 'POSITION_QUALITY_LOST'): RuleId | null;
+// [RC-01 rev3] (N-8) Sustituido: `code: DecisionCode | 'POSITION_QUALITY_LOST'`.
+// IncidentCode = DecisionCode | 'POSITION_QUALITY_LOST' lo define la spec 002 (models/guardian.ts).
+export function ruleForDecision(code: IncidentCode): RuleId | null;
 ```
 > El catálogo vive en el dominio porque es **política** compartida: la 001 lo define y lo muestra;
 > la 002 lo usa para rellenar `incidents.rule` (contrato RC-01, D4). Una prueba verifica que cada
@@ -266,6 +268,9 @@ export function ruleForDecision(code: DecisionCode | 'POSITION_QUALITY_LOST'): R
 > asignarle regla rompe la prueba.
 > Dependencia de tipos: `DecisionCode` está definido en `models/guardian.ts` (spec 002, ya
 > implementado en `integration`); ambos viven en el mismo paquete de dominio.
+> **[RC-01 rev3] (N-8)** La firma usa `IncidentCode`, que la spec 002 añade al dominio en su tarea
+> RC-1a (U1, paso 1) *([RC-01 rev4] M-4: antes decía «RC-1»)*. Si `IncidentCode` aún no existe cuando se implementa RC-2 de esta spec, se
+> espera a esa tarea; ambas van en el mismo paso, según la tabla «Orden intercalado de U1».
 > **[RC-01 rev2] (I-5)** Esta es la **única** implementación de `ruleForDecision`: la spec 002 la
 > importa para `incidents.rule` y no define otra en `backend/src/rules/`. Se entrega en la unidad
 > **U1, paso 1** (dominio aditivo), antes que cualquier migración o servicio que la use.

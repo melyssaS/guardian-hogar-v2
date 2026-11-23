@@ -3,7 +3,7 @@
 **Fase MADA:** ENTENDER
 **HU cubiertas:** HU-02 del backlog del prototipo («Configurar zonas restringidas»). El plano 2D,
 identificado como «HU-01» en esta spec, es soporte de HU-02/HU-03 del backlog **[RC-01]**.
-**Estado:** Aprobado (2026-11-23) en lo implementado; refuerzo RC-01 (incluida la rev2) pendiente de aprobación humana **[RC-01 rev2]**
+**Estado:** Aprobado (2026-11-23) en lo implementado; refuerzo RC-01 (incluidas la rev2 a la rev6) pendiente de aprobación humana **[RC-01 rev2]** **[RC-01 rev3]** **[RC-01 rev4]** **[RC-01 rev5]** **[RC-01 rev6]**
 > Estado anterior: «Borrador — implementado; refuerzo RC-01 pendiente de aprobación humana».
 
 > **[RC-01] Nota de numeración.** En el backlog del prototipo (`prototipo/Guardian_Hogar_Artifact_V2.html`)
@@ -44,8 +44,12 @@ Esta spec cubre el plano 2D (rotulado «HU-01» en esta spec; soporte de HU-02/H
 > | Permitir o restringir habitaciones existentes | RF-02.3, CA-02.6 (implementado) |
 > | La decisión usa la configuración vigente | Spec 002/003: el vigilante lee las zonas activas en cada evaluación |
 > | El cambio de reglas se registra | **RF-05 (nuevo, RC-01)** |
-> | Configuraciones válidas y autorizadas | Válidas: RF-03 (implementado). Autorizadas: **Q-A** (pendiente de decisión humana) |
+> | Configuraciones válidas y autorizadas | Válidas: RF-03 (implementado). Autorizadas: ~~**Q-A** (pendiente de decisión humana)~~ **[RC-01 rev3]** riesgo aceptado **RA-01** (§11b; decisión Q-A del 2026-11-23) |
 > | (Vista) Catálogo de reglas | **RF-06 (nuevo, RC-01)** |
+
+> **[RC-01 rev3]** Coherencia con las vistas excluidas: las vistas «Visión general» e «Ingeniería · SDD»
+> del prototipo quedan fuera de alcance del producto (decisión del equipo, registrada en la spec 003
+> §7). Esta spec solo cubre la vista «Zonas y reglas», que sí forma parte del producto.
 
 ---
 
@@ -142,6 +146,8 @@ Este modelo es compartido por backend y frontend. Reside en `@home-guardian/doma
   que no son denegaciones (`AUTHORIZED`, `SAFE_STOP_ACTIVE`, `BUSY`) no pertenecen a ninguna.
   `ruleForDecision(code)` devuelve el id de la regla o `null`. La spec 002 la usa para rellenar
   `incidents.rule`.
+  **[RC-01 rev3] (N-8)** Firma: `ruleForDecision(code: IncidentCode): RuleId | null`, donde
+  `IncidentCode = DecisionCode | 'POSITION_QUALITY_LOST'` es un tipo de dominio que define la spec 002.
   **[RC-01 rev2]** Es la **única** definición de `ruleForDecision` del sistema (I-5): vive en
   `domain/src/rules/catalog.ts` y la spec 002 la consume, sin reimplementarla. Además de los códigos
   de denegación, acepta `POSITION_QUALITY_LOST` (incidente de pérdida de señal decidido en Q-B) y
@@ -332,7 +338,8 @@ Cada escenario produce una prueba en Fase VERIFICAR.
 
 ## 8. Fuera de alcance
 
-- Autenticación y autorización (se trata en otra HU/spec). **[RC-01]** Ver pregunta abierta Q-A.
+- Autenticación y autorización (se trata en otra HU/spec). ~~**[RC-01]** Ver pregunta abierta Q-A.~~
+  **[RC-01 rev3] (N-10)** Sustituido: ya no es pregunta abierta; es el riesgo aceptado RA-01.
   **[RC-01 rev2]** Decidido: deuda documentada; ver §11b «Riesgos aceptados».
 - **[RC-01]** Interfaz para consultar el historial de cambios de zona (solo API en este refuerzo).
 - Formas de zona no rectangulares (polígonos, círculos).
@@ -359,7 +366,7 @@ HU-01, HU-02
 - [x] El humano aprueba explícitamente este `requirements.md` antes de pasar a DISEÑAR.
   **[RC-01 rev2]** Aprobado el 2026-11-23 en lo implementado (Q-C).
 - [ ] **[RC-01]** El humano aprueba el refuerzo RC-01 (RF-05, RF-06, CA-02.9–CA-02.13, rótulo de HU)
-  y su revisión 2 **[RC-01 rev2]**.
+  y sus revisiones 2 a 6 **[RC-01 rev2]** **[RC-01 rev3]** **[RC-01 rev4]** **[RC-01 rev5]** **[RC-01 rev6]**.
 
 ---
 
@@ -414,6 +421,7 @@ equipo lo alinee.
 |--------|-------|--------|---------|
 | RC-01 — Refuerzo de convergencia con el prototipo | 2026-11-22 | Propuesto, pendiente de aprobación | Rótulo de HU alineado con el backlog del prototipo sin renumerar; **RF-05** registro de cambios de zona (append-only, misma transacción, `GET /api/zones/changes`); **RF-06** catálogo de reglas `RULES` + `ruleForDecision` + tarjeta en la UI; RNF-06; CA-02.9–CA-02.13; preguntas Q-A (autenticación) y Q-C (aprobación). Contrato común con las specs 002 y 003 (D6 y catálogo de reglas). |
 | RC-01 rev2 — Hallazgos del analista sobre RC-01 | 2026-11-23 | Propuesto, pendiente de aprobación | Ver tabla siguiente. Decisiones del humano aplicadas: Q-A (deuda documentada, §11b), Q-C (aprobada en lo implementado), M-1 (r = m = 0 por defecto, pad 30 solo en pruebas), Q-B (`R-SIGNAL-01` cubre `POSITION_QUALITY_LOST`). |
+| RC-01 rev3 — Ronda final del analista (N-1..N-18) | 2026-11-23 | Propuesto, pendiente de aprobación | Decisiones del humano: Q-I (A1 siempre en (120, 90); no afecta a esta spec) y exclusión de las vistas «Visión general» e «Ingeniería · SDD» (nota de coherencia en §1). Ver tabla «Resolución de hallazgos — RC-01 rev3». |
 
 ### Resolución de hallazgos — RC-01 rev2 [RC-01 rev2]
 
@@ -446,3 +454,61 @@ equipo lo alinee.
 | M-11 Nombre `Incident` | No aplica a esta spec. |
 | M-12 Steering desalineado | Anotado como observación para el equipo (§11b), sin editar el steering. |
 
+### Resolución de hallazgos — RC-01 rev3 [RC-01 rev3]
+
+| Hallazgo | Resolución en esta spec |
+|----------|-------------------------|
+| N-1 Posición de A1 en base nueva (Q-I) | No aplica: esta spec no menciona posiciones de robots (comprobado: sin referencias a (160, 123)). |
+| N-2 Validación del alta en zona activa | No aplica a esta spec (002/003). |
+| N-3 `audit_log` nullable | No aplica a esta spec. |
+| N-4 Unión `move` ↔ sesiones | No aplica a esta spec. |
+| N-5 Orden intercalado de U1 | El grafo de `tasks.md` cita la tabla única «Orden intercalado de U1» de la spec 002; RC-1/RC-2 en U1 paso 1. |
+| N-6 Convivencia tras la `008` | No aplica a esta spec. |
+| N-7 Copia de `robot_sessions` en la 002 | No aplica a esta spec. |
+| N-8 `IncidentCode` | `ruleForDecision(code: IncidentCode)` (RF-06.2, design §RULES); el tipo lo define la spec 002. |
+| N-9 `denialRule` | No aplica a esta spec (la 002 usa `ruleForDecision` de la 001). |
+| N-10 Restos sin marcar | §1 (criterios del prototipo) y §8: «Q-A pendiente» sustituido por riesgo aceptado RA-01. |
+| N-11 Casillas de compuerta | No aplica: las compuertas de la 001 ya están marcadas (rev2). |
+| N-12 Indicador de paradas | No aplica a esta spec. |
+| N-13 Auditoría `SESSION_STARTED` | No aplica a esta spec. |
+| N-14 Tarea dueña de montaje y retirada | No aplica a esta spec. |
+| N-15 CHECK de `decision_code` / `position_quality` | No aplica a esta spec. |
+| N-16 Redacción de R10.5 | No aplica a esta spec. |
+| N-17 Semilla y `initRobot` | No aplica a esta spec. |
+| N-18 Numeración de criterios de la 002 | No aplica a esta spec. |
+| Vistas excluidas | Nota de coherencia en §1: «Visión general» e «Ingeniería · SDD» fuera de alcance (registrado en la spec 003 §7); esta spec solo cubre «Zonas y reglas». |
+
+### RC-01 rev4 (2026-11-23) [RC-01 rev4]
+Decisiones del humano: alta con zonas no legibles → `409 ROBOT_START_NOT_VERIFIABLE` (no afecta a esta
+spec); montaje aditivo de `/api/robots` antes de la UI; filas antiguas de `audit_log` con `robot_id` NULL;
+posición compartida (120, 90) aceptada. Ninguna afecta a la 001.
+
+| Hallazgo | Resolución en esta spec |
+|----------|-------------------------|
+| B-1, I-1..I-7 | No aplica a esta spec (002/003). |
+| M-3 | Corregido: la exclusión de vistas está en la spec 003 **§7** (no §8), en §1 y en esta tabla. |
+| M-4 | Corregido: design cita la tarea **RC-1a** de la 002 (antes «RC-1»). |
+| M-1, M-2, M-5..M-11 | No aplica a esta spec. |
+
+### RC-01 rev5 (2026-11-23) [RC-01 rev5]
+Decisiones del humano: la unidad de «verde» es el par «prueba roja → implementación» (una fila de la tabla
+«Orden intercalado de U1»); el controlador antiguo usa la vía temporal `moveLegacy` hasta la retirada
+(002 RC-20). Ninguna cambia los requisitos de esta spec.
+
+| Hallazgo | Resolución en esta spec |
+|----------|-------------------------|
+| N4-2 | RC-1 y RC-2 forman un par (una sola fila de la tabla); marcado en `tasks.md`. |
+| M4-1 | Aclaración: la tarjeta «Fuera del MVP» del catálogo de reglas (RC-12/RC-13, §«Zonas y reglas») no es una entrada de la barra lateral; la regla de CA-03.28 de la spec 003 (las vistas excluidas no aparecen de ninguna forma en la barra lateral) no la afecta. |
+| N4-1, N4-3, N4-4, M4-2..M4-5 | No aplica a esta spec (002/003). |
+
+### RC-01 rev6 (2026-11-23) [RC-01 rev6]
+Decisiones del humano: `#/supervision` se mantiene como ruta por defecto y los E2E existentes son
+`simulation.spec.ts` y `rooms.spec.ts` (N5-1); la prueba de dos robots de la 002 RC-17 pasa a RC-10 y
+RC-17 se retira (N5-3); `moveLegacy` queda acotado a tres pruebas de la 002 (N5-2). Ninguna cambia los
+requisitos de esta spec.
+
+| Hallazgo | Resolución en esta spec |
+|----------|-------------------------|
+| N5-6 | Estado de los tres documentos y casilla de compuerta con las revisiones rev2 a rev6 (corregido). |
+| N5-4 | Sin cambios: RC-1 + RC-2 siguen siendo una sola fila de la tabla (ahora la fila 2 de 24). |
+| N5-1..N5-3, N5-5, N5-7 | No aplica a esta spec (002/003). |

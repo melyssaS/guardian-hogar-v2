@@ -3,7 +3,7 @@
 **Spec:** `003-movement-simulation`
 **Fase MADA:** DISEÑAR
 **HU cubiertas:** HU-03
-**Estado:** Aprobado (2026-11-22); revisión QA RECHAZADA por B-1 — se resuelve con RC-01; refuerzo RC-01 pendiente de aprobación
+**Estado:** Aprobado (2026-11-22); revisión QA RECHAZADA por B-1 — se resuelve con RC-01; refuerzo RC-01 pendiente de aprobación (incluidas rev2 a rev6)
 
 ## Overview
 
@@ -13,7 +13,9 @@ elige un destino (clic o coordenadas); el backend evalúa origen→destino contr
 `DENIED_SAFE_STOP`) y el **estado** del robot (`IDLE`, `MOVING`, `SAFE_STOP`). La interfaz
 solo **renderiza la respuesta**: no evalúa reglas (constitución art. III). El estado y la
 posición del robot son autoridad del backend. Alcance de estados: IDLE/MOVING/SAFE_STOP;
-DEGRADED/RECOVERING quedan fuera (dependen de sensores, reservado).
+DEGRADED/RECOVERING quedan fuera (dependen de sensores, reservado). *(Sustituido por RC-01:
+el vocabulario y la decisión son los de la spec 002, y la UI muestra los 5 estados; ver los
+bloques [RC-01], [RC-01 rev2] y [RC-01 rev3]. N-10.)*
 
 > **[RC-01] Refuerzo de convergencia con el prototipo.** Esta spec deja de tener vigilante
 > propio y pasa a ser la **capa de simulación y presentación**:
@@ -180,40 +182,81 @@ export function decideMovement(input: {
 > ├── services/robotCatalogService.ts        # registrar/listar robots; el estado inicial lo crea
 > │                                         #   `guardianService.initRobot` (spec 002, DD-220)
 > ├── services/sessionService.ts             # startSession(robotId), acceptRequest(robotId, cmd) [RC-01 rev2]
+>                                            #   [RC-01 rev4] acceptRequest(robotId, cmd, currentState),
+>                                            #   getLastRequest(robotId) (I-3, I-4)
 > ├── rules/sequenceRule.ts                  # checkSequence (pura)
 > ├── repositories/robotCatalogRepository.ts # tabla robots
 > ├── repositories/sessionRepository.ts      # tabla robot_sessions
-> └── routes/robotsRoutes.ts                 # /api/robots (monta además las subrutas por robot
->                                            #   del vigilante que define la spec 002)
+> └── routes/robotsRoutes.ts                 # /api/robots ~~(monta además las subrutas por robot
+>                                            #   del vigilante que define la spec 002)~~
+>                                            #   [RC-01 rev4] (M-2) monta GET/POST /api/robots,
+>                                            #   GET /:robotId y POST /:robotId/sessions (dueña única);
+>                                            #   state|move|recover|position los monta guardianRoutes (002)
 > ```
+> - **[RC-01 rev4] (I-3, I-4)** Firmas vigentes: `acceptRequest(robotId, cmd: MoveCommand,
+>   currentState: RobotStateName): ServiceResult<LastRequest>` — el `move` de la 002 le pasa el
+>   estado que ya leyó, que se usa para auditar `INVALID_SESSION`/`DUPLICATE_EVENT` (`audit_log.state`
+>   no admite NULL salvo en el rechazo del alta); y `getLastRequest(robotId): LastRequest | null`,
+>   que la 002 usa para `RobotStatus.lastRequest` en `GET .../state` y el catálogo para `Robot`.
+>   `startSession(robotId)` lee el estado con `robotRepository.getStatus(robotId)` (spec 002 RC-10,
+>   que va antes en el orden de U1). DD-132.
+> - **[RC-01 rev3] (N-4) Una sola unión `move` ↔ sesiones:**
+>   `sessionService.acceptRequest(robotId, cmd: MoveCommand): ServiceResult<LastRequest>`, con el
+>   tipo `ServiceResult<T> = { kind: 'ok'; value: T } | { kind: 'rejected'; code; status; ... }`
+>   que define la spec 002. Valida sesión y secuencia (`checkSequence`), **audita** los rechazos
+>   `INVALID_SESSION`/`DUPLICATE_EVENT` y registra la última solicitud aceptada. El `move` de la
+>   002 la invoca antes del vigilante y **no** escribe `robot_sessions`. El tipo
+>   `{ kind: 'accepted' }` del texto rev2 de abajo queda **sustituido** por `{ kind: 'ok', value }`.
 > - `acceptRequest(robotId, { sessionId, sequence, destination })` lee la sesión vigente, llama
 >   a `checkSequence` y, si es válida, registra la solicitud como última aceptada.
 >   **[RC-01 rev2] (B-5)** Devuelve un **resultado tipado**:
 >   `{ kind: 'accepted' } | { kind: 'rejected'; code: 'INVALID_SESSION' | 'DUPLICATE_EVENT' }`,
->   **sin lanzar excepciones**. El `move` de la spec 002 la invoca dentro de su transacción, antes
+>   **sin lanzar excepciones**. ~~El `move` de la spec 002 la invoca dentro de su transacción, antes
 >   de `evaluateMovement`; ante un rechazo escribe la fila de `audit_log`, **confirma** la
->   transacción y el controller responde `409 { code, message }`. No crea incidente ni transición.
+>   transacción y el controller responde `409 { code, message }`.~~ *(Sustituido por RC-01 rev3/rev4:
+>   la fila de `audit_log` del rechazo la escribe `acceptRequest`, no el `move` de la 002; I-3.)*
+>   No crea incidente ni transición.
 >   (El texto anterior "lanza `AppError(409, …)`" queda **sustituido por RC-01 rev2**: con
 >   `db.transaction`, la excepción revertía también la auditoría.)
 > - `startSession(robotId)` (`POST /api/robots/:robotId/sessions`): genera un UUID, sustituye la
 >   fila de `robot_sessions` del robot (`last_sequence = 0`, `last_*` a `NULL`) y responde
->   `201 { sessionId }`.
+>   `201 { sessionId }`. **[RC-01 rev3] (N-13)** En la misma transacción inserta en `audit_log`
+>   `event_code = 'SESSION_STARTED'` con el `robot_id` (CHECK de la `011`, spec 002).
 > - **[RC-01 rev2] Alta de un robot (M-9, Q-D, I-6):** en **una** transacción
 >   `IMMEDIATE`, `robotCatalogService.register(input)`:
->   1. valida que (120, 90) no cae en ninguna zona **activa** expandida por r + m (geometría pura
+>   1. ~~valida que (120, 90) no cae en ninguna zona **activa** expandida por r + m (geometría pura
 >      de la spec 001, `isCollision` con segmento degenerado). Si cae →
 >      `{ kind: 'rejected', code: 'ROBOT_START_IN_RESTRICTED_ZONE' }`, fila en `audit_log`,
->      transacción confirmada, `409` (no se crea nada);
+>      transacción confirmada, `409` (no se crea nada);~~ *(Sustituido por RC-01 rev3, N-2.)*
+>      **[RC-01 rev3]** llama a `guardianService.checkStartPosition(position)` (spec 002; regla
+>      pura `evaluateStartPosition` sobre las zonas **activas** expandidas por r + m). Si devuelve
+>      `{ kind: 'rejected', code: 'ROBOT_START_IN_RESTRICTED_ZONE' }`, la 002 ya escribió la fila de
+>      `audit_log`; el catálogo confirma la transacción y responde `409` sin crear nada. La decisión
+>      de seguridad la toma el vigilante, no el catálogo (art. III);
 >   2. inserta la fila de `robots`;
 >   3. invoca `guardianService.initRobot(robotId, { x: 120, y: 90 })` (spec 002), que crea la fila
 >      de `robot_state` con un `INSERT` simple (falla si existe) y registra la transición inicial.
+>      **[RC-01 rev3]** `initRobot` **solo** inserta y registra T9 (`ROBOT_REGISTERED`); si por
+>      defensa en profundidad detecta una posición insegura, lanza una excepción y la transacción
+>      se revierte (no hay robot sin estado).
 >   El catálogo **no** escribe `robot_state`. (Sustituye a "usando la API del repositorio de
 >   estado de la spec 002".)
+>   **[RC-01 rev4]** (Decisión 1) `checkStartPosition` puede devolver también
+>   `{ kind: 'rejected', code: 'ROBOT_START_NOT_VERIFIABLE', cause: 'ZONE_DATA_UNAVAILABLE' }` cuando
+>   las zonas no se pueden leer; el catálogo confirma la transacción (la 002 ya auditó) y responde
+>   `409 { code, message, cause }` sin crear nada. DD-129. (M-10) Orden de validación del alta:
+>   payload (`422 INVALID_ROBOT`) → nombre duplicado (`409 ROBOT_NAME_DUPLICATE`, comprobado antes de
+>   llamar a `checkStartPosition`; la restricción `UNIQUE` sigue como red de seguridad) →
+>   `checkStartPosition`. Solo el último paso audita.
 > - Robot inexistente → `404 ROBOT_NOT_FOUND`; validación → `422 INVALID_ROBOT`; nombre
 >   repetido (UNIQUE) → `409 ROBOT_NAME_DUPLICATE`.
 > - Las rutas de esta spec se prueban primero con una app de prueba que monta solo
->   `robotsRoutes`; el montaje en `app.ts` se hace en el paso 5 de U1, junto a la retirada del
->   vigilante provisional (tasks).
+>   `robotsRoutes`; ~~el montaje en `app.ts` se hace en el paso 5 de U1, junto a la retirada del
+>   vigilante provisional (tasks).~~ *(Sustituido por RC-01 rev4, decisión 2:)* la spec 002 monta
+>   `/api/robots` (catálogo, sesiones y rutas por robot) e `/api/incidents` en `app.ts` **de forma
+>   aditiva** al final del paso 3, junto a las rutas antiguas, para que la UI del paso 4 y el E2E
+>   funcionen y cada tarea termine en verde; el paso 5 solo **retira** lo antiguo. Nada intermedio
+>   se integra: U1 llega entera a `integration`, así que nunca hay dos vigilantes integrados. DD-130.
 
 ```
 packages/backend/src/
@@ -271,6 +314,11 @@ function assertWithinFloor(p: Point) {
 > ├── App.tsx                          # barra lateral: Supervisión · Robots simulados ·
 > │                                    #   Zonas y reglas · Incidentes (hash #/supervision,
 > │                                    #   #/robots, #/zonas, #/incidentes)
+> │                                    #   [RC-01 rev3] solo 4 entradas; sin "Visión general" ni "Ingeniería · SDD"
+> │                                    #   [RC-01 rev5] (M4-1) esas vistas no se muestran de ninguna forma:
+> │                                    #   ni deshabilitadas, ni "Fuera del MVP"/"reservado", ni el encabezado del grupo
+> │                                    #   [RC-01 rev4] (M-9) ruta por defecto #/supervision
+> │                                    #   (también para rutas desconocidas)
 > ├── pages/SimulationPage.tsx         # Supervisión: selector de robot, indicadores, plano,
 > │                                    #   coordenadas, "Enviar a escaleras", "Nueva sesión",
 > │                                    #   "Liberar parada", DecisionPanel, TelemetryPanel
@@ -296,6 +344,8 @@ function assertWithinFloor(p: Point) {
 > - Indicadores de Supervisión: robots activos (`GET /api/robots`, estado distinto de
 >   `SAFE_STOP`/`DEGRADED`), paradas (`GET /api/incidents`, total), solicitudes procesadas y zonas
 >   restringidas (`GET /api/zones`). Todos derivan de datos de la API.
+>   **[RC-01 rev3] (N-12)** "Paradas (total)" queda sustituido: "Decisiones de parada" cuenta los
+>   incidentes con `rule` `R-ZONA-01` o `R-DATA-01`, y "Pérdidas de señal" los `R-SIGNAL-01`.
 >   **[RC-01 rev2] (M-7)** "Solicitudes procesadas" = `lastRequest.sequence` del robot
 >   seleccionado (0 si es `null`); se elimina el "contador de la sesión de la UI", que
 >   contradecía DD-114.
@@ -342,15 +392,23 @@ CREATE TABLE IF NOT EXISTS robots (
   created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 ```
-Seed (base nueva): `Aspiradora A1` (`VACUUM`, (160, 123)) y `Vigilante V2` (`GUARD`, (488, 290)).
+~~Seed (base nueva): `Aspiradora A1` (`VACUUM`, (160, 123)) y `Vigilante V2` (`GUARD`, (488, 290)).~~
+*(Sustituido por RC-01 rev3, Q-I.)*
 La fila 1 actual de `robot_state` se asocia a `Aspiradora A1`; la conversión de `robot_state` a
 una fila por robot (`robot_id` PK/FK) la diseña la spec 002.
 
 > **[RC-01 rev2] Migración `007_create_robots.sql` (paso 2 de U1, primera del bloque):** crea
 > `robots` e inserta A1 (id = 1) y V2 (id = 2). Las posiciones (Q-E) no viven en `robots`: las
-> fija la migración `008` de la spec 002 al crear `robot_state` por robot — en base nueva A1 en
-> (160, 123) y V2 en (488, 290); en base existente A1 conserva la fila actual. Sin `UPDATE`
-> encubiertos. Los robots registrados después empiezan en (120, 90) vía `initRobot`.
+> fija la migración `008` de la spec 002 al crear `robot_state` por robot — ~~en base nueva A1 en
+> (160, 123) y V2 en (488, 290); en base existente A1 conserva la fila actual~~ *(Sustituido por
+> RC-01 rev3, Q-I: A1 conserva siempre la fila actual, (120, 90) en base nueva; V2 en (488, 290).)*
+> Sin `UPDATE` encubiertos. Los robots registrados después empiezan en (120, 90) vía `initRobot`.
+
+> **[RC-01 rev3] (Q-I, N-17)** Sustituye las posiciones de la nota anterior: la `008` asocia la
+> fila actual de `robot_state` (`id = 1`) a A1 **tal cual** —en una base nueva, (120, 90)— y crea
+> la de V2 en (488, 290); sin lógica de detección de base nueva. La semilla **no** pasa por
+> `initRobot`: A1 y V2 quedan en `state_transition_log` con la fila base `MIGRATION_BASELINE`
+> (migración `010`), no con T9 (`ROBOT_REGISTERED`), que es solo para las altas por API.
 
 ### [RC-01] Tabla `robot_sessions` (propietaria esta spec)
 > **[RC-01 rev2] Esquema único (B-3), migración `012_create_robot_sessions.sql`** (paso 2 de U1,
@@ -559,6 +617,25 @@ devuelta por la API para ese robot.
 > "Perder conexión" (DEGRADED + incidente `R-SIGNAL-01`) y "Recuperar señal" + "Liberar parada";
 > indicador "Solicitudes procesadas" desde `lastRequest.sequence`. Las rutas de esta spec se prueban
 > primero con una app de prueba sin montar en `app.ts`.
+>
+> **[RC-01 rev4] Añadidos:** alta con zonas no legibles → `409 ROBOT_START_NOT_VERIFIABLE` con `cause`
+> y fila de auditoría (CA-03.35); orden de validación del alta (CA-03.36); `acceptRequest` audita con
+> el `currentState` recibido; `getLastRequest`; ruta por defecto `#/supervision` (CA-03.37); el E2E
+> ~~pasa en todas las tareas desde el paso 4 gracias al montaje aditivo~~ **[RC-01 rev5] (N4-1)** pasa
+> al cerrar cada par desde el paso 4: RC-15 adapta `simulation.spec.ts` al vocabulario y RC-19 a las
+> rutas y a la barra de 4 entradas; el montaje aditivo (002 RC-17b) cubre el backend.
+>
+> **[RC-01 rev5] Añadidos:** la unidad de verde es el par "prueba roja → implementación" (DD-136);
+> RC-11 se ejecuta antes de RC-10 y forma un trío con RC-9 (DD-137); la adaptación mínima del E2E
+> va dentro de RC-15 y RC-19 (DD-138); los restos de las revisiones 3 y 4 sobre quién monta y quién
+> retira quedan marcados como sustituidos.
+>
+> **[RC-01 rev6] Añadidos (N5-1, N5-4):** los E2E existentes son **dos**, `simulation.spec.ts` y
+> `rooms.spec.ts`, y pasan **al final de cada par** desde el paso 4 (no entre las dos tareas de un par):
+> RC-15 adapta `simulation.spec.ts` al vocabulario y al robot seleccionado, y RC-19 adapta
+> `simulation.spec.ts` a las rutas y `rooms.spec.ts` a `/#/zonas` (la ruta por defecto es
+> `#/supervision`, CA-03.37). `FloorPlan` pinta un `data-testid="robot-<id>"` por robot (DD-139).
+> (RC-16 + RC-17) depende también de la capa de datos de (RC-13 + RC-14) (DD-140).
 
 ---
 
@@ -584,20 +661,38 @@ devuelta por la API para ese robot.
 | DD-116 [RC-01 rev2] | Una sola migración de la UI, directa a `/api/robots/:robotId/*` (Q-F) | Etapa intermedia `/api/robot` | Elimina el ciclo del plan (B-1) y la tarea huérfana (B-2) |
 | DD-117 [RC-01 rev2] | Rechazos auditados como resultados tipados (B-5) | `AppError(409)` dentro de la transacción | La excepción revertía la fila de `audit_log` |
 | DD-118 [RC-01 rev2] | Alta en zona activa → `409 ROBOT_START_IN_RESTRICTED_ZONE` (Q-D) | Aceptar `IDLE` o iniciar en `SAFE_STOP` | Fallo seguro sin estados iniciales anómalos; el operador elige otra configuración |
-| DD-119 [RC-01 rev2] | Semilla A1 (160, 123) y V2 (488, 290) en base nueva; base existente conserva A1; nuevos en (120, 90) (Q-E) | Una única posición para todo | Fiel al prototipo sin reescribir el estado existente |
+| ~~DD-119 [RC-01 rev2]~~ | ~~Semilla A1 (160, 123) y V2 (488, 290) en base nueva; base existente conserva A1; nuevos en (120, 90) (Q-E)~~ | — | *Sustituida por DD-124 (RC-01 rev3)* |
 | DD-120 [RC-01 rev2] | "Perder conexión"/"Recuperar señal" en la UI (Q-B) | Mantenerlo reservado | Es la señal explícita ya en alcance en la 002; la inyección de fallos de sensor sigue reservada |
 | DD-121 [RC-01 rev2] | "Solicitudes procesadas" = `lastRequest.sequence` de la API (M-7) | Contador local | Corrige la contradicción con DD-114 |
 | DD-122 [RC-01 rev2] | Esquema único de `robot_sessions` y tipos `MoveCommand`/`LastRequest` (B-3) | Definiciones en 002 y 003 | Una sola fuente de verdad |
 | DD-123 [RC-01 rev2] | Autenticación como riesgo aceptado (Q-A) | Implementarla ahora | Decisión del humano; se aborda en un bloque posterior |
+| DD-124 [RC-01 rev3] | A1 siempre con la fila actual (120, 90); V2 en (488, 290); nuevos en (120, 90) (Q-I) | Detectar "base nueva" en la `008` | La migración ya aplicada `002` impide distinguirla; sin lógica heurística en migraciones |
+| DD-125 [RC-01 rev3] | "Visión general" y "Ingeniería · SDD" fuera de alcance. **[RC-01 rev5] (M4-1)** No se muestran de ninguna forma en la barra lateral: ni deshabilitadas, ni con «Fuera del MVP»/«reservado», ni el encabezado del grupo | Implementarlas como páginas estáticas | Sin HU; contradicen el stack o simulan evidencia (art. XV); la evidencia está en el repositorio |
+| DD-126 [RC-01 rev3] | `checkStartPosition` del vigilante antes del `INSERT`; `initRobot` solo crea (N-2) | Validar en el catálogo o en `initRobot` | La decisión de seguridad es del vigilante (art. III); sin robots sin estado ni doble auditoría |
+| DD-127 [RC-01 rev3] | `acceptRequest(robotId, cmd): ServiceResult<LastRequest>` como única unión con `move` (N-4) | Lógica de sesión repetida en la 002 | Un solo escritor de `robot_sessions` y un solo tipo de resultado |
+| DD-128 [RC-01 rev3] | "Decisiones de parada" y "Pérdidas de señal" por separado (N-12) | Un total de incidentes | R10.3 habla de decisiones `DENIED`; la pérdida de señal no es una decisión del vigilante |
+| DD-129 [RC-01 rev4] | Alta con zonas no legibles → `409 ROBOT_START_NOT_VERIFIABLE` con `cause` (decisión humana) | Reutilizar `ROBOT_START_IN_RESTRICTED_ZONE` | Fallo seguro sin afirmar una zona que no se comprobó (art. VIII); el operador ve la causa real |
+| DD-130 [RC-01 rev4] | Montaje aditivo de `/api/robots` e `/api/incidents` al final del paso 3 (spec 002) | Montar solo en el paso 5 | Cada tarea termina en verde (E2E incluido); U1 se integra entera, así que nunca hay dos vigilantes integrados |
+| DD-131 [RC-01 rev4] | Se aceptan marcadores superpuestos en (120, 90) (decisión humana) | Separar posiciones iniciales | Consecuencia de Q-I; se distinguen por etiqueta y selector |
+| DD-132 [RC-01 rev4] | `acceptRequest(robotId, cmd, currentState)` y `getLastRequest(robotId)` | `sessionService` leyendo `robot_state` | Respeta el escritor único y da a la 002 una vía para `lastRequest` (I-3, I-4) |
+| DD-133 [RC-01 rev4] | `AUTHORIZED` responde `state: IDLE` | Responder `MOVING` | Es lo implementado (DD-209 de la 002); las pruebas y el E2E usan un solo valor (I-7) |
+| DD-134 [RC-01 rev4] | Ruta por defecto `#/supervision` | Pantalla vacía o "Visión general" | "Visión general" está fuera de alcance (M-9) |
+| DD-135 [RC-01 rev4] | Esta spec es dueña de `POST /api/robots/:robotId/sessions` | Montarla también en la 002 | Un solo router por ruta (M-2) |
+| DD-136 [RC-01 rev5] | La unidad de "verde" es el par "prueba roja → implementación" (decisión humana, N4-2) | Exigir verde tras cada tarea (fusionando pares) | Se ve el rojo de verdad (art. V) y la suite se exige en verde al cerrar cada par; el único rojo que cruza filas es el "rojo esperado" de la 002 RC-20, paso (0) |
+| DD-137 [RC-01 rev5] | RC-11 se ejecuta antes de RC-10 y forma un trío con RC-9 (N4-2) | Dejarla después con la etiqueta "prueba roja primero", o quitarle la etiqueta | Una prueba roja no puede ir después de su implementación; la integración verifica `audit_log` tras cada `409` (Property 11), un comportamiento crítico que merece rojo previo |
+| DD-138 [RC-01 rev5] | La adaptación mínima de `simulation.spec.ts` va dentro de RC-15 (vocabulario) y RC-19 (rutas y barra); RC-22 solo amplía (N4-1) | Dejar todo el E2E para RC-22 | El E2E existente no queda en rojo durante el paso 4 |
+| DD-139 [RC-01 rev6] | `FloorPlan` pinta un `data-testid="robot-<id>"` por robot, y los E2E y las pruebas RTL se adaptan al robot seleccionado; `rooms.spec.ts` abre `/#/zonas` (decisión humana, N5-1) | Mantener un único `robot` y desambiguar con `.first()`; dejar `rooms.spec.ts` abriendo `/` | Con dos robots un único testid viola el modo estricto de Playwright; con `#/supervision` por defecto `/` ya no es la vista de zonas. Así el E2E termina en verde al cerrar cada par |
+| DD-140 [RC-01 rev6] | (RC-16 + RC-17) depende también de (RC-13 + RC-14); las aristas extra del grafo son orden de ejecución (N5-4) | Dejarla solo tras 002 RC-17b y RC-2 | `useIncidents` consume `incidentsApi`, que implementa RC-14: la dependencia es real y la tabla debe declararla |
 
 ---
 
 ## Dependencias entre HU
 - HU-03 depende de la spec `001-restricted-zones` (geometría, `isCollision`, `Zone`) y de la
   spec del vigilante (mapeo colisión→decisión). Reutiliza el `FloorPlan` de la spec 001.
-- Estados `DEGRADED`/`RECOVERING` e inyección de fallos de sensor quedan fuera (reservado).
+- ~~Estados `DEGRADED`/`RECOVERING` e inyección de fallos de sensor quedan fuera (reservado).~~ *(Sustituido por RC-01 rev3 (N-10): los estados se muestran y la pérdida de señal está en alcance; solo la inyección de fallos de sensor sigue reservada.)*
 - **[RC-01]** Depende de la spec 002 para: rutas por robot del vigilante, `robot_state` con una
-  fila por robot y su API de escritura (para el estado inicial), incidentes con `robot_id` y
+  fila por robot y su API de escritura (para el estado inicial) *(sustituido por RC-01 rev3:
+  `checkStartPosition` + `initRobot`, DD-126)*, incidentes con `robot_id` y
   `rule`, `audit_log` (rechazos de sesión) y la invocación de `acceptRequest` dentro de `move`.
   Depende de la spec 001 para el catálogo `RULES`. Los estados `DEGRADED`/`RECOVERING` se
   **muestran**; la inyección de fallos sigue reservada (pregunta Q-B de requirements).
@@ -607,6 +702,13 @@ devuelta por la API para ese robot.
   `position` e incidentes con `robot_id`, `rule` y `zone_name` de la 002 (paso 3); montaje
   conjunto en `app.ts` y retirada del vigilante provisional (paso 5). La pérdida de señal sale de
   lo reservado (DD-120).
+- **[RC-01 rev3]** El orden exacto de las tareas de las tres specs dentro de U1 es la tabla
+  "Orden intercalado de U1" del `tasks.md` de la spec 002. Dependencias nuevas:
+  `checkStartPosition` y `initRobot` (002 RC-15) antes del catálogo (paso 3b), y `ServiceResult<T>`
+  de la 002 para `acceptRequest`. ~~El montaje y la retirada del paso 5 son de la 002 (RC-20).~~ *(Sustituido por RC-01 rev4/rev5: el montaje aditivo es de la 002 RC-17b, al final del paso 3; la 002 RC-20 solo retira y va después de RC-21 de esta spec.)*
+- **[RC-01 rev4]** `robotRepository.getStatus` (002 RC-10) antes de `sessionService` (I-3); el
+  montaje **aditivo** de `/api/robots` e `/api/incidents` lo hace la 002 al final del paso 3 (antes de
+  la UI); la 002 RC-20 queda solo como retirada y va **después** de RC-21 de esta spec (I-1).
 
 ---
 
@@ -616,7 +718,14 @@ devuelta por la API para ese robot.
 - [x] Se confirma `reset` como salida de SAFE_STOP para la demo (DD-106). (aprobado junto con el design)
 
 ## Compuerta RC-01 (pendiente)
-- [ ] El humano aprueba el refuerzo RC-01 de este `design.md` (DD-108..DD-115).
+- [ ] El humano aprueba el refuerzo RC-01 de este `design.md` (~~DD-108..DD-115~~ **[RC-01 rev4] (N-11)** DD-108..DD-138 vigentes; DD-119 sustituida).
 - [ ] Se confirma la retirada de `reset` (DD-109) y del vigilante provisional (DD-108).
-- [ ] Se resuelven las preguntas Q-A, Q-B y Q-C de requirements §11. **[RC-01 rev2]** Resueltas por el humano el 2026-11-23 (ver requirements §11).
+- [x] Se resuelven las preguntas Q-A, Q-B y Q-C de requirements §11. **[RC-01 rev2]** Resueltas por el humano el 2026-11-23 (ver requirements §11). **[RC-01 rev3]** También Q-I y la exclusión de vistas.
 - [ ] **[RC-01 rev2]** El analista revisa la revisión 2 (DD-116..DD-123) y el humano aprueba el RC-01.
+- [ ] **[RC-01 rev3]** El analista revisa la revisión 3 (DD-124..DD-128) y el humano aprueba el RC-01.
+- [x] **[RC-01 rev4]** El humano decide las 4 preguntas de la pasada sobre la rev3 (2026-11-23).
+- [ ] **[RC-01 rev4]** El analista revisa la revisión 4 (DD-129..DD-135) y el humano aprueba el RC-01.
+- [x] **[RC-01 rev5]** El humano decide las 2 preguntas de la pasada sobre la rev4 (2026-11-23): unidad de verde = par y vía temporal `moveLegacy`.
+- [ ] **[RC-01 rev5]** El analista revisa la revisión 5 (DD-136..DD-138) y el humano aprueba el RC-01.
+- [x] **[RC-01 rev6]** El humano decide las 3 preguntas de la pasada sobre la rev5 (2026-11-23): ruta por defecto `#/supervision` con testid por robot, RC-17 de la 002 pasa a RC-10 y `moveLegacy` acotado.
+- [ ] **[RC-01 rev6]** El humano aprueba el RC-01 (DD-136..DD-140).

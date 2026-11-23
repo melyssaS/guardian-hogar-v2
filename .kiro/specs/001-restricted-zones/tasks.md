@@ -4,7 +4,7 @@
 **HU cubiertas:** HU-02 del backlog del prototipo; el plano («HU-01» en esta spec) es soporte de
 HU-02/HU-03 **[RC-01]**
 **Estado:** Tareas 1–27 implementadas (28 parcial); spec aprobada en lo implementado (2026-11-23);
-refuerzo RC-01 (incluida la rev2) pendiente de aprobación humana **[RC-01 rev2]**
+refuerzo RC-01 (incluidas la rev2 a la rev6) pendiente de aprobación humana **[RC-01 rev2]** **[RC-01 rev3]** **[RC-01 rev4]** **[RC-01 rev5]** **[RC-01 rev6]**
 (requiere `requirements.md` y `design.md` aprobados, incluido RC-01)
 
 ## Overview
@@ -146,9 +146,9 @@ graph TD
 > - **U2:** registro de cambios de zona (`013_create_zone_change_log.sql`), tarjeta de reglas,
 >   E2E y calidad (RC-3 a RC-16).
 
-- [ ] RC-1. `[U1 · paso 1]` (Prueba roja primero) Pruebas del catálogo de reglas: `RULES` contiene exactamente `R-ZONA-01`, `R-SIGNAL-01` y `R-DATA-01`; cada código de denegación de `DecisionCode` aparece en exactamente una regla; `ruleForDecision` devuelve la regla correcta y `null` para `AUTHORIZED`, `SAFE_STOP_ACTIVE` y `BUSY`; **[RC-01 rev2]** `ruleForDecision('POSITION_QUALITY_LOST')` devuelve `R-SIGNAL-01` (Q-B)
+- [ ] RC-1. `[U1 · paso 1]` **[RC-01 rev5] [par con RC-2]** (Prueba roja primero) Pruebas del catálogo de reglas: `RULES` contiene exactamente `R-ZONA-01`, `R-SIGNAL-01` y `R-DATA-01`; cada código de denegación de `DecisionCode` aparece en exactamente una regla; `ruleForDecision` devuelve la regla correcta y `null` para `AUTHORIZED`, `SAFE_STOP_ACTIVE` y `BUSY`; **[RC-01 rev2]** `ruleForDecision('POSITION_QUALITY_LOST')` devuelve `R-SIGNAL-01` (Q-B)
   - _Requisitos: RF-06.1, RF-06.2, CA-02.13, Property 8_
-- [ ] RC-2. `[U1 · paso 1]` Implementar `domain/src/rules/catalog.ts` (`RuleId`, `Rule`, `RULES`, `ruleForDecision`) y exportarlo desde `index.ts`
+- [ ] RC-2. `[U1 · paso 1]` **[RC-01 rev5] [par con RC-1]** Implementar `domain/src/rules/catalog.ts` (`RuleId`, `Rule`, `RULES`, `ruleForDecision`) y exportarlo desde `index.ts`
   - _Requisitos: RF-06.1, RF-06.2, DD-014_
   - **Dependencia entre specs:** debe estar integrada **antes** de la tarea de la spec 002 que añade `rule` a `incidents` (RC-01, D4).
   - **[RC-01 rev2] (I-5)** Única definición del sistema; la spec 002 la importa y no implementa otra.
@@ -194,6 +194,11 @@ graph TD
   R1 -. RULES antes de incidents.rule .-> S002[Spec 002: tarea RC-01 de incidentes]
 ```
 
+> **[RC-01 rev3] (N-5)** El orden real de ejecución de U1 entre las tres specs lo fija la tabla
+> única **«Orden intercalado de U1»** publicada en `002-safety-guardian/tasks.md`; este grafo es
+> local a la 001 y se subordina a ella. RC-1/RC-2 van en U1 paso 1, junto a la tarea de la 002
+> que define `IncidentCode` (N-8). RC-3..RC-16 van en U2.
+
 ```json
 {
   "rc01_waves": [
@@ -227,3 +232,10 @@ graph TD
 - **[RC-01 rev2]** Q-A decidida: deuda documentada (riesgo RA-01 en `requirements.md` §11b). Q-C
   decidida: spec aprobada en lo implementado. M-1 decidida: `r = m = 0` por defecto.
 - **[RC-01 rev2] Unidades:** U1 = RC-1, RC-2. U2 = RC-3 a RC-16.
+
+> **[RC-01 rev5]** Unidad de «verde»: el par «prueba roja → implementación». RC-1 y RC-2 se ejecutan
+> seguidas y ocupan **una sola fila** de la tabla «Orden intercalado de U1» (002 tasks.md); la suite debe
+> quedar en verde al terminar RC-2, no entre RC-1 y RC-2.
+
+> **[RC-01 rev6]** La tabla «Orden intercalado de U1» (002 tasks.md) tiene ahora 24 filas; el par
+> (RC-1 + RC-2) de esta spec es la **fila 2** (N5-3 eliminó la de 002 RC-17). Sin otros cambios.

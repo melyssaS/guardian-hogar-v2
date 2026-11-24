@@ -108,10 +108,10 @@ No se guardan secretos en el repositorio.
 
 ## 4. Aplicación desplegada
 
-- Frontend: **<!-- TODO: URL pública del frontend -->**
-- API: **<!-- TODO: URL pública del backend -->** (`/health` para verificar)
+- Aplicación: <https://home-guardian-web.onrender.com/>
+- API: <!-- TODO: URL pública del backend (verificar con /health) -->
 
-> Pendiente de la fase 6 (OPERAR). Completar con las URLs al desplegar.
+> Desplegado en Render (fase 6, OPERAR). En el plan gratuito el primer acceso puede tardar mientras el servicio se reactiva.
 
 ## 5. Evidencias de pruebas y controles de seguridad
 
@@ -203,4 +203,11 @@ El revisor es independiente de quien implementa (constitución, art. XIV). Si re
 
 ## Equipo
 
-Equipo 6, EAFIT. Roles de demo: ver backlog (HU-06 a HU-10).
+**Equipo 6 — Robotics Software Systems, industria domótica**
+
+- July Dayana Becerra Moreno
+- Melyssa Solano Diaz
+- Julian David Garcia Paz
+- Sergio Stives Barrios Buitrago
+
+Roles de demo: ver backlog (HU-06 a HU-10).

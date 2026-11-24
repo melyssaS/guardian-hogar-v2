@@ -47,14 +47,25 @@ Cada spec contiene `requirements.md`, `design.md` y `tasks.md`.
 
 Backlog:
 
-| HU            | Descripción                         | Estado           |
-| ------------- | ----------------------------------- | ---------------- |
-| HU-01         | Registrar y consultar robots        | Línea base       |
-| HU-02         | Configurar zonas restringidas       | Línea base       |
-| HU-03         | Simular movimiento del robot        | Línea base       |
-| HU-04         | Detener al robot ante una violación | Línea base       |
-| HU-05         | Consultar incidentes                | Línea base       |
-| HU-06 a HU-10 | Reservadas para la demo en vivo     | No implementadas |
+| HU    | Descripción                         | Estado     |
+| ----- | ----------------------------------- | ---------- |
+| HU-01 | Registrar y consultar robots        | Línea base |
+| HU-02 | Configurar zonas restringidas       | Línea base |
+| HU-03 | Simular movimiento del robot        | Línea base |
+| HU-04 | Detener al robot ante una violación | Línea base |
+| HU-05 | Consultar incidentes                | Línea base |
+
+### Historias de usuario reservadas para la demo (HU-06 a HU-10)
+
+No están implementadas en la línea base. El profesor asigna cada una durante la clase y cada integrante la construye en vivo con SDD. En la interfaz hay un marcador de código en el lugar exacto donde se integrará cada una.
+
+| HU    | Historia                                                                                                                                  | Dominio       | Criterios de aceptación                                                                                                                            |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HU-06 | Filtrar incidentes por severidad. Como operador, quiero filtrar incidentes para encontrar rápidamente los eventos que requieren atención. | Consultas     | Filtro por una severidad válida. Restablecer el filtro muestra todos los registros. No modifica ni elimina incidentes.                             |
+| HU-07 | Exportar incidentes a CSV. Como operador, quiero descargar los incidentes en CSV para analizarlos fuera de la plataforma.                 | Reportes      | Encabezados consistentes y codificación válida. Solo exporta datos autorizados. Escapa correctamente campos con comas y comillas.                  |
+| HU-08 | Conteos de incidentes por tipo. Como operador, quiero visualizar el número de incidentes agrupados por tipo.                              | Indicadores   | Los contadores coinciden con la consulta de incidentes. Sin incidentes, muestra cero. No altera los registros originales.                          |
+| HU-09 | Buscar robots por nombre. Como operador, quiero buscar un robot por nombre sin recorrer toda la lista.                                    | Catálogo      | Búsqueda sin distinguir mayúsculas de minúsculas. Estado vacío informado con claridad. No modifica el catálogo.                                    |
+| HU-10 | Advertencia de batería baja. Como operador, quiero identificar baterías bajas en el catálogo para revisar el estado de las unidades.      | Visualización | Advertencia para nivel inferior al umbral acordado. No modifica las reglas críticas de seguridad. La señal es visible sin depender solo del color. |
 
 Trazabilidad: `HU → requirements.md → design.md → tasks.md → código → pruebas → incidente registrado`.
 
@@ -209,5 +220,3 @@ El revisor es independiente de quien implementa (constitución, art. XIV). Si re
 - Melyssa Solano Diaz
 - Julian David Garcia Paz
 - Sergio Stives Barrios Buitrago
-
-Roles de demo: ver backlog (HU-06 a HU-10).

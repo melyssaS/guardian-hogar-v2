@@ -1,16 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { moveSchema, positionSchema } from '../src/index.js';
+import { positionSchema } from '../src/index.js';
 
 // Spec 002 — R7.1 (validación Zod), R8.1 (lectura de posición)
 describe('esquemas Zod del robot', () => {
-  it('moveSchema exige destination con forma de punto', () => {
-    expect(moveSchema.parse({ destination: { x: 250, y: 175 } })).toEqual({
-      destination: { x: 250, y: 175 },
-    });
-    expect(moveSchema.safeParse({}).success).toBe(false);
-    expect(moveSchema.safeParse({ destination: { x: 'a', y: 2 } }).success).toBe(false);
-  });
-
   it('positionSchema acepta una lectura RELIABLE válida', () => {
     expect(positionSchema.parse({ position: { x: 120, y: 90 }, quality: 'RELIABLE' })).toEqual({
       position: { x: 120, y: 90 },

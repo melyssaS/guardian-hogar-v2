@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -17,7 +17,15 @@ describe('migrate (RF-04.2)', () => {
     const versions = db.prepare('SELECT version FROM schema_migrations ORDER BY version').all();
     expect(versions).toEqual(ALL.map((version) => ({ version })));
     // Spec 002, R5.1/R5.3: incidents y audit_log quedan creadas y son append-only.
-    for (const table of ['zones', 'robot_state', 'movement_log', 'incidents', 'audit_log']) {
+    for (const table of [
+      'zones',
+      'robot_state',
+      'movement_log',
+      'incidents',
+      'audit_log',
+      'robots',
+      'zone_change_log',
+    ]) {
       expect(
         db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(table),
       ).toBeDefined();
@@ -35,7 +43,7 @@ describe('migrate (RF-04.2)', () => {
     expect(() => db.prepare('DELETE FROM incidents').run()).toThrow(/append-only/);
 
     db.prepare(
-      `INSERT INTO audit_log (event_code, state, dest_x, dest_y) VALUES ('BUSY', 'MOVING', 5, 5)`,
+      `INSERT INTO audit_log (robot_id, event_code, state, x, y) VALUES (1, 'BUSY', 'MOVING', 5, 5)`,
     ).run();
     expect(() => db.prepare('UPDATE audit_log SET state = ?').run('IDLE')).toThrow(/append-only/);
     expect(() => db.prepare('DELETE FROM audit_log').run()).toThrow(/append-only/);
@@ -47,19 +55,19 @@ describe('migrate (RF-04.2)', () => {
     // R6.1: el robot sembrado (id=1) arranca IDLE, con posición válida y calidad confiable.
     expect(
       db
-        .prepare('SELECT state, pos_x, pos_y, position_quality FROM robot_state WHERE id = 1')
+        .prepare('SELECT state, pos_x, pos_y, position_quality FROM robot_state WHERE robot_id = 1')
         .get(),
     ).toEqual({ state: 'IDLE', pos_x: 120, pos_y: 90, position_quality: 'RELIABLE' });
     // R6.3 / §2.1: el CHECK ahora admite DEGRADED y RECOVERING sin violarse.
     expect(() =>
-      db.prepare("UPDATE robot_state SET state = 'DEGRADED' WHERE id = 1").run(),
+      db.prepare("UPDATE robot_state SET state = 'DEGRADED' WHERE robot_id = 1").run(),
     ).not.toThrow();
     expect(() =>
-      db.prepare("UPDATE robot_state SET state = 'RECOVERING' WHERE id = 1").run(),
+      db.prepare("UPDATE robot_state SET state = 'RECOVERING' WHERE robot_id = 1").run(),
     ).not.toThrow();
     // Un estado inexistente sigue rechazándose.
     expect(() =>
-      db.prepare("UPDATE robot_state SET state = 'TELEPORT' WHERE id = 1").run(),
+      db.prepare("UPDATE robot_state SET state = 'TELEPORT' WHERE robot_id = 1").run(),
     ).toThrow();
   });
 
@@ -78,5 +86,63 @@ describe('migrate (RF-04.2)', () => {
     expect(() => migrate(db, dir)).toThrow();
     expect(db.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get()).toEqual({ n: 0 });
     expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'a'").get()).toBeUndefined();
+  });
+
+  // Spec 002 — RC-4 (R10.5, DD-227): una migración pendiente anterior a la última aplicada
+  // indica un orden de entrega roto; el arranque falla y no se aplica nada.
+  it('falla sin aplicar nada si una pendiente es anterior a la última aplicada', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mig-'));
+    writeFileSync(join(dir, '001_a.sql'), 'CREATE TABLE a (id INTEGER);');
+    writeFileSync(join(dir, '003_c.sql'), 'CREATE TABLE c (id INTEGER);');
+    const db = createDatabase(':memory:');
+    expect(migrate(db, dir)).toEqual(['001_a.sql', '003_c.sql']);
+
+    writeFileSync(join(dir, '002_b.sql'), 'CREATE TABLE b (id INTEGER);');
+    writeFileSync(join(dir, '004_d.sql'), 'CREATE TABLE d (id INTEGER);');
+    expect(() => migrate(db, dir)).toThrow(/002_b\.sql.*003_c\.sql/);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get()).toEqual({ n: 2 });
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE name IN ('b', 'd')").all()).toEqual([]);
+  });
+
+  it('acepta pendientes posteriores a la última aplicada', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mig-'));
+    writeFileSync(join(dir, '001_a.sql'), 'CREATE TABLE a (id INTEGER);');
+    const db = createDatabase(':memory:');
+    migrate(db, dir);
+    writeFileSync(join(dir, '002_b.sql'), 'CREATE TABLE b (id INTEGER);');
+    expect(migrate(db, dir)).toEqual(['002_b.sql']);
+  });
+
+  // Spec 001 — RC-16 (RF-05.5, RA-02, Q-G): 013 se entrega después de 007-012.
+  it('aplica 013_create_zone_change_log después de 007-012', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mig-'));
+    const earlier = ALL.filter((f) => f < '013_create_zone_change_log.sql');
+    for (const file of earlier) {
+      copyFileSync(join(MIGRATIONS_DIR, file), join(dir, file));
+    }
+    const db = createDatabase(':memory:');
+    migrate(db, dir);
+    // Con 001-012 aplicadas, 013 aparece como la única pendiente.
+    copyFileSync(
+      join(MIGRATIONS_DIR, '013_create_zone_change_log.sql'),
+      join(dir, '013_create_zone_change_log.sql'),
+    );
+    expect(migrate(db, dir)).toEqual(['013_create_zone_change_log.sql']);
+    expect(
+      db
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'zone_change_log'")
+        .get(),
+    ).toBeDefined();
+  });
+
+  // Q-G: si una base ya tiene 013 aplicada y aparece pendiente una migración con número menor,
+  // el arranque falla con un error claro.
+  it('rechaza una migración anterior cuando 013 ya está aplicada', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mig-'));
+    for (const file of ALL) copyFileSync(join(MIGRATIONS_DIR, file), join(dir, file));
+    const db = createDatabase(':memory:');
+    migrate(db, dir);
+    writeFileSync(join(dir, '012b_late.sql'), 'CREATE TABLE late (id INTEGER);');
+    expect(() => migrate(db, dir)).toThrow(/Out-of-order/);
   });
 });

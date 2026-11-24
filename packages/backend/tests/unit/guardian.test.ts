@@ -119,6 +119,7 @@ describe('evaluateMovement — vigilante de seguridad (spec 002)', () => {
         authorized: false,
         nextState: 'SAFE_STOP',
         collisionType: 'ORIGIN_IN_RESTRICTED_ZONE',
+        zoneName: 'Cuarto del bebé',
         reason: expect.any(String),
       });
     });
@@ -130,6 +131,7 @@ describe('evaluateMovement — vigilante de seguridad (spec 002)', () => {
         authorized: false,
         nextState: 'SAFE_STOP',
         collisionType: 'RESTRICTED_ZONE_VIOLATION',
+        zoneName: 'Escaleras',
         reason: expect.any(String),
       });
     });
@@ -141,6 +143,7 @@ describe('evaluateMovement — vigilante de seguridad (spec 002)', () => {
         authorized: false,
         nextState: 'SAFE_STOP',
         collisionType: 'TRAJECTORY_CROSSES_ZONE',
+        zoneName: 'Escaleras',
         reason: expect.any(String),
       });
     });

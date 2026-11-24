@@ -5,10 +5,16 @@ import type { Db } from '../../src/db/connection.js';
 import { seedDefaultRooms } from '../../src/db/seed.js';
 import { createAuditLogRepository } from '../../src/repositories/auditLogRepository.js';
 import { createIncidentRepository } from '../../src/repositories/incidentRepository.js';
+import { createTransitionLogRepository } from '../../src/repositories/transitionLogRepository.js';
 import { createRobotRepository } from '../../src/repositories/robotRepository.js';
 import { createZoneRepository } from '../../src/repositories/zoneRepository.js';
-import { createGuardianService, type GuardianService } from '../../src/services/guardianService.js';
-import { createTestDb } from '../helpers.js';
+import {
+  createTestDb,
+  createTestGuardian,
+  getRobotState,
+  setRobotState,
+  type TestGuardian,
+} from '../helpers.js';
 
 /**
  * VERIFICAR (MADA): verificación de trazabilidad del `guardianService` y del reinicio seguro
@@ -22,12 +28,13 @@ import { createTestDb } from '../helpers.js';
  */
 
 /** Construye el servicio sobre repos reales en memoria. `getActiveZones` puede lanzar (caso G). */
-function build(db: Db, getActiveZones?: () => never): GuardianService {
+function build(db: Db, getActiveZones?: () => never): TestGuardian {
   const zones = createZoneRepository(db);
-  return createGuardianService({
+  return createTestGuardian(db, {
     robots: createRobotRepository(db),
     incidents: createIncidentRepository(db),
     audit: createAuditLogRepository(db),
+    transitions: createTransitionLogRepository(db),
     getActiveZones: getActiveZones ?? (() => zones.findAll('active')),
     runInTransaction: (fn) => db.transaction(fn)(),
     pad: 0,
@@ -36,9 +43,9 @@ function build(db: Db, getActiveZones?: () => never): GuardianService {
 
 /** Filas crudas de `audit_log` en orden de inserción (R5.3). */
 function readAuditLog(db: Db): Array<Record<string, unknown>> {
-  return db
-    .prepare('SELECT event_code, state, dest_x, dest_y FROM audit_log ORDER BY id')
-    .all() as Array<Record<string, unknown>>;
+  return db.prepare('SELECT event_code, state, x, y FROM audit_log ORDER BY id').all() as Array<
+    Record<string, unknown>
+  >;
 }
 
 const FREE: Point = { x: 450, y: 120 }; // Pasillo/Cocina: libre con pad=0.
@@ -48,7 +55,7 @@ const IN_BABY_ROOM: Point = { x: 300, y: 300 }; // Dentro de Cuarto del bebé (z
 
 describe('VERIFICAR · guardianService (trazabilidad de requisitos)', () => {
   let db: Db;
-  let service: GuardianService;
+  let service: TestGuardian;
 
   beforeEach(() => {
     db = createTestDb();
@@ -60,32 +67,34 @@ describe('VERIFICAR · guardianService (trazabilidad de requisitos)', () => {
     it('R5.1: un AUTHORIZED queda registrado por el cambio de estado/posición persistido', () => {
       // El servicio documenta (JSDoc §registro de evaluaciones) que un AUTHORIZED se registra
       // por el propio snapshot persistido, no en incidents ni audit_log.
-      const before = service.getState();
+      const before = service.getStatus(1);
       expect(before.position).toEqual({ x: 120, y: 90 });
 
-      const out = service.move(FREE);
+      const out = service.move(1, FREE);
       expect(out.decision).toBe('AUTHORIZED');
 
       // El rastro del AUTHORIZED es el estado/posición persistidos.
-      expect(service.getState()).toEqual({
-        state: 'IDLE',
-        position: FREE,
-        positionQuality: 'RELIABLE',
-      });
+      expect(service.getStatus(1)).toEqual(
+        expect.objectContaining({
+          state: 'IDLE',
+          position: FREE,
+          positionQuality: 'RELIABLE',
+        }),
+      );
       // No contamina los registros de denegación/rechazo.
       expect(createIncidentRepository(db).findAll()).toHaveLength(0);
       expect(readAuditLog(db)).toHaveLength(0);
     });
 
     it('R5.1: una denegación queda registrada como incidente (rastro observable)', () => {
-      const out = service.move(IN_STAIRS);
+      const out = service.move(1, IN_STAIRS);
       expect(out.decision).toBe('DENIED');
       expect(createIncidentRepository(db).findAll()).toHaveLength(1);
     });
 
     it('R5.1: un rechazo por estado queda registrado en audit_log (rastro observable)', () => {
-      service.move(IN_STAIRS); // → SAFE_STOP.
-      service.move(FREE); // rechazo por estado → audit_log.
+      service.move(1, IN_STAIRS); // → SAFE_STOP.
+      service.move(1, FREE); // rechazo por estado → audit_log.
       expect(readAuditLog(db)).toHaveLength(1);
     });
   });
@@ -95,7 +104,7 @@ describe('VERIFICAR · guardianService (trazabilidad de requisitos)', () => {
       const incidents = createIncidentRepository(db);
       expect(incidents.findAll()).toHaveLength(0);
 
-      const out = service.move(IN_STAIRS);
+      const out = service.move(1, IN_STAIRS);
       if (out.decision !== 'DENIED') throw new Error('se esperaba DENIED');
       expect(out.code).toBe('RESTRICTED_ZONE_VIOLATION');
       expect(out.incidentId).toBeGreaterThan(0);
@@ -109,15 +118,17 @@ describe('VERIFICAR · guardianService (trazabilidad de requisitos)', () => {
         stateAfter: 'SAFE_STOP',
       });
       // zonesSnapshot refleja las dos zonas activas del seed.
-      expect(all[0]?.zonesSnapshot.map((z) => z.name).sort()).toEqual([
-        'Cuarto del bebé',
-        'Escaleras',
-      ]);
-      expect(service.getState().state).toBe('SAFE_STOP');
+      expect(
+        incidents
+          .findById(out.incidentId)
+          ?.zonesSnapshot.map((z) => z.name)
+          .sort(),
+      ).toEqual(['Cuarto del bebé', 'Escaleras']);
+      expect(service.getStatus(1).state).toBe('SAFE_STOP');
     });
 
     it('R5.2: denegación geométrica a otra zona activa también crea un incidente', () => {
-      const out = service.move(IN_BABY_ROOM);
+      const out = service.move(1, IN_BABY_ROOM);
       if (out.decision !== 'DENIED') throw new Error('se esperaba DENIED');
       expect(out.code).toBe('RESTRICTED_ZONE_VIOLATION');
       const all = createIncidentRepository(db).findAll();
@@ -127,12 +138,12 @@ describe('VERIFICAR · guardianService (trazabilidad de requisitos)', () => {
     });
 
     it('R5.2: denegación por datos UNRELIABLE (INSUFFICIENT_DATA) crea incidente → DEGRADED', () => {
-      createRobotRepository(db).saveFull({
+      setRobotState(db, 1, {
         state: 'IDLE',
         position: { x: 120, y: 90 },
         positionQuality: 'UNRELIABLE',
       });
-      const out = service.move(FREE);
+      const out = service.move(1, FREE);
       if (out.decision !== 'DENIED') throw new Error('se esperaba DENIED');
       expect(out.code).toBe('INSUFFICIENT_DATA');
       expect(out.state).toBe('DEGRADED');
@@ -147,12 +158,12 @@ describe('VERIFICAR · guardianService (trazabilidad de requisitos)', () => {
     });
 
     it('R5.2: denegación por datos MISSING (MISSING_POSITION) crea incidente', () => {
-      createRobotRepository(db).saveFull({
+      setRobotState(db, 1, {
         state: 'IDLE',
         position: { x: 120, y: 90 },
         positionQuality: 'MISSING',
       });
-      const out = service.move(FREE);
+      const out = service.move(1, FREE);
       if (out.decision !== 'DENIED') throw new Error('se esperaba DENIED');
       expect(out.code).toBe('MISSING_POSITION');
 
@@ -169,7 +180,7 @@ describe('VERIFICAR · guardianService (trazabilidad de requisitos)', () => {
       const failing = build(db, () => {
         throw new Error('zone repo down');
       });
-      const out = failing.move(FREE);
+      const out = failing.move(1, FREE);
       if (out.decision !== 'DENIED') throw new Error('se esperaba DENIED');
       expect(out.code).toBe('ZONE_DATA_UNAVAILABLE');
       expect(out.state).toBe('SAFE_STOP');
@@ -181,18 +192,18 @@ describe('VERIFICAR · guardianService (trazabilidad de requisitos)', () => {
         stateAfter: 'SAFE_STOP',
       });
       // zones = null → snapshot vacío (fallo seguro, DD-204).
-      expect(all[0]?.zonesSnapshot).toEqual([]);
+      expect(createIncidentRepository(db).findById(all[0]?.id ?? 0)?.zonesSnapshot).toEqual([]);
     });
   });
 
   describe('R5.3 · rechazo por estado sin incidente, pero con audit_log', () => {
     it('R5.3: en SAFE_STOP un nuevo move → REJECTED/SAFE_STOP_ACTIVE sin incidente nuevo', () => {
       const incidents = createIncidentRepository(db);
-      service.move(IN_STAIRS); // → SAFE_STOP + 1 incidente.
+      service.move(1, IN_STAIRS); // → SAFE_STOP + 1 incidente.
       expect(incidents.findAll()).toHaveLength(1);
       const auditBefore = readAuditLog(db).length;
 
-      const out = service.move(FREE); // rechazo por estado.
+      const out = service.move(1, FREE); // rechazo por estado.
       expect(out).toMatchObject({
         decision: 'REJECTED',
         code: 'SAFE_STOP_ACTIVE',
@@ -207,17 +218,20 @@ describe('VERIFICAR · guardianService (trazabilidad de requisitos)', () => {
       expect(audit[audit.length - 1]).toMatchObject({
         event_code: 'SAFE_STOP_ACTIVE',
         state: 'SAFE_STOP',
-        dest_x: FREE.x,
-        dest_y: FREE.y,
+        x: FREE.x,
+        y: FREE.y,
       });
       // R3.3: el estado y la posición no cambian por el rechazo.
-      expect(service.getState()).toMatchObject({ state: 'SAFE_STOP', position: { x: 120, y: 90 } });
+      expect(service.getStatus(1)).toMatchObject({
+        state: 'SAFE_STOP',
+        position: { x: 120, y: 90 },
+      });
     });
 
     it('R5.3: cada rechazo por estado sucesivo añade una fila de auditoría (append-only)', () => {
-      service.move(IN_STAIRS); // → SAFE_STOP.
-      service.move(FREE); // rechazo 1.
-      service.move(FREE_2); // rechazo 2.
+      service.move(1, IN_STAIRS); // → SAFE_STOP.
+      service.move(1, FREE); // rechazo 1.
+      service.move(1, FREE_2); // rechazo 2.
 
       const audit = readAuditLog(db);
       expect(audit).toHaveLength(2);
@@ -231,81 +245,92 @@ describe('VERIFICAR · guardianService (trazabilidad de requisitos)', () => {
 
   describe('R4.1 · recuperación válida', () => {
     it('R4.1: desde SAFE_STOP con posición segura y RELIABLE → recuperado a IDLE', () => {
-      service.move(IN_STAIRS); // → SAFE_STOP; posición (120,90) sigue en Sala (inactiva).
-      expect(service.getState()).toMatchObject({
+      service.move(1, IN_STAIRS); // → SAFE_STOP; posición (120,90) sigue en Sala (inactiva).
+      expect(service.getStatus(1)).toMatchObject({
         state: 'SAFE_STOP',
         positionQuality: 'RELIABLE',
       });
 
-      const out = service.recover();
-      expect(out).toEqual({ recovered: true, state: 'IDLE', position: { x: 120, y: 90 } });
-      expect(service.getState().state).toBe('IDLE');
+      const out = service.recover(1);
+      expect(out).toMatchObject({
+        kind: 'ok',
+        value: { state: 'IDLE', position: { x: 120, y: 90 }, transitioned: true },
+      });
+      expect(service.getStatus(1).state).toBe('IDLE');
       // La posición se preserva en la recuperación.
-      expect(service.getState().position).toEqual({ x: 120, y: 90 });
+      expect(service.getStatus(1).position).toEqual({ x: 120, y: 90 });
     });
 
     it('R4.1: desde DEGRADED con posición segura y RELIABLE → recuperado a IDLE', () => {
-      createRobotRepository(db).saveFull({
+      setRobotState(db, 1, {
         state: 'DEGRADED',
         position: { x: 120, y: 90 },
         positionQuality: 'RELIABLE',
       });
-      const out = service.recover();
-      expect(out).toEqual({ recovered: true, state: 'IDLE', position: { x: 120, y: 90 } });
-      expect(service.getState().state).toBe('IDLE');
+      const out = service.recover(1);
+      expect(out).toMatchObject({
+        kind: 'ok',
+        value: { state: 'IDLE', position: { x: 120, y: 90 }, transitioned: true },
+      });
+      expect(service.getStatus(1).state).toBe('IDLE');
     });
   });
 
   describe('R4.2 · recuperación inválida (permanece en parada, sin efectos)', () => {
     it('R4.2(a): positionQuality no RELIABLE → rechazada, estado y posición sin cambios', () => {
-      service.move(IN_STAIRS); // → SAFE_STOP.
-      createRobotRepository(db).setPositionQuality('UNRELIABLE');
-      const snapshotBefore = service.getState();
+      service.move(1, IN_STAIRS); // → SAFE_STOP.
+      createRobotRepository(db).saveQuality(1, 'UNRELIABLE');
+      const snapshotBefore = service.getStatus(1);
 
-      const out = service.recover();
-      expect(out.recovered).toBe(false);
+      const out = service.recover(1);
+      expect(out).toMatchObject({ kind: 'rejected', cause: 'UNRELIABLE_DATA' });
       // Sin efectos: snapshot idéntico al previo.
-      expect(service.getState()).toEqual(snapshotBefore);
-      expect(service.getState().state).toBe('SAFE_STOP');
+      expect(service.getStatus(1)).toEqual(snapshotBefore);
+      expect(service.getStatus(1).state).toBe('SAFE_STOP');
     });
 
     it('R4.2(a bis): positionQuality MISSING → rechazada, permanece en parada', () => {
-      createRobotRepository(db).saveFull({
+      setRobotState(db, 1, {
         state: 'SAFE_STOP',
         position: { x: 120, y: 90 },
         positionQuality: 'MISSING',
       });
-      const out = service.recover();
-      expect(out.recovered).toBe(false);
-      expect(service.getState()).toMatchObject({ state: 'SAFE_STOP', positionQuality: 'MISSING' });
+      const out = service.recover(1);
+      expect(out).toMatchObject({ kind: 'rejected', cause: 'UNRELIABLE_DATA' });
+      expect(service.getStatus(1)).toMatchObject({
+        state: 'SAFE_STOP',
+        positionQuality: 'MISSING',
+      });
     });
 
     it('R4.2(b): posición dentro de zona activa (insegura) → rechazada, permanece en parada', () => {
-      createRobotRepository(db).saveFull({
+      setRobotState(db, 1, {
         state: 'SAFE_STOP',
         position: IN_STAIRS, // dentro de Escaleras (activa).
         positionQuality: 'RELIABLE',
       });
-      const snapshotBefore = service.getState();
+      const snapshotBefore = service.getStatus(1);
 
-      const out = service.recover();
-      expect(out.recovered).toBe(false);
-      expect(service.getState()).toEqual(snapshotBefore);
-      expect(service.getState().state).toBe('SAFE_STOP');
+      const out = service.recover(1);
+      expect(out).toMatchObject({ kind: 'rejected', cause: 'UNSAFE_POSITION' });
+      expect(service.getStatus(1)).toEqual(snapshotBefore);
+      expect(service.getStatus(1).state).toBe('SAFE_STOP');
     });
   });
 
   describe('R4.3 · recuperación fuera de parada', () => {
-    it('R4.3: en IDLE la recuperación es rechazada/idempotente sin efectos', () => {
-      const snapshotBefore = service.getState();
+    it('R4.5: en IDLE la recuperación es idempotente (transitioned false) y solo se audita', () => {
+      const snapshotBefore = service.getStatus(1);
       expect(snapshotBefore.state).toBe('IDLE');
 
-      const out = service.recover();
-      expect(out.recovered).toBe(false);
-      // Sin efectos: no toca el snapshot, no registra incidente ni auditoría.
-      expect(service.getState()).toEqual(snapshotBefore);
+      const out = service.recover(1);
+      expect(out).toMatchObject({ kind: 'ok', value: { transitioned: false } });
+      // Sin efectos de estado: no toca el snapshot ni crea incidente; solo audita RECOVER_NOOP.
+      expect(service.getStatus(1)).toEqual(snapshotBefore);
       expect(createIncidentRepository(db).findAll()).toHaveLength(0);
-      expect(readAuditLog(db)).toHaveLength(0);
+      expect(readAuditLog(db)).toEqual([
+        expect.objectContaining({ event_code: 'RECOVER_NOOP', state: 'IDLE' }),
+      ]);
     });
   });
 });
@@ -319,33 +344,38 @@ describe('VERIFICAR · bootstrap reinicio seguro ADR-10 (trazabilidad de requisi
   });
 
   it('R6.1: tras migrar+sembrar, bootstrap deja IDLE y RELIABLE (no fuerza MISSING/UNRELIABLE)', () => {
-    const robots = createRobotRepository(db);
     bootstrap(db);
-    const snapshot = robots.getFull();
+    const snapshot = getRobotState(db, 1);
     expect(snapshot.state).toBe('IDLE');
     expect(snapshot.positionQuality).toBe('RELIABLE');
     expect(snapshot.position).toEqual({ x: 120, y: 90 });
   });
 
   it('R6.2: un MOVING persistido se degrada a SAFE_STOP conservando posición y calidad', () => {
-    const robots = createRobotRepository(db);
-    robots.saveFull({ state: 'MOVING', position: { x: 42, y: 17 }, positionQuality: 'RELIABLE' });
+    setRobotState(db, 1, {
+      state: 'MOVING',
+      position: { x: 42, y: 17 },
+      positionQuality: 'RELIABLE',
+    });
 
     bootstrap(db);
 
-    const snapshot = robots.getFull();
+    const snapshot = getRobotState(db, 1);
     expect(snapshot.state).toBe('SAFE_STOP'); // no reanuda un movimiento a ciegas.
     expect(snapshot.position).toEqual({ x: 42, y: 17 });
     expect(snapshot.positionQuality).toBe('RELIABLE'); // la calidad se preserva.
   });
 
   it('R6.2: estado no-MOVING no se altera en el reinicio (p. ej. IDLE permanece IDLE)', () => {
-    const robots = createRobotRepository(db);
-    robots.saveFull({ state: 'IDLE', position: { x: 70, y: 80 }, positionQuality: 'RELIABLE' });
+    setRobotState(db, 1, {
+      state: 'IDLE',
+      position: { x: 70, y: 80 },
+      positionQuality: 'RELIABLE',
+    });
 
     bootstrap(db);
 
-    expect(robots.getFull()).toEqual({
+    expect(getRobotState(db, 1)).toEqual({
       state: 'IDLE',
       position: { x: 70, y: 80 },
       positionQuality: 'RELIABLE',

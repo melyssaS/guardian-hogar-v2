@@ -6,7 +6,7 @@ type Source = 'body' | 'query' | 'params';
 
 /**
  * Valida y sanea `req[source]` con Zod (RNF-01). Si falla, responde con el error de
- * `toError`: por defecto 422 VALIDATION_ERROR; /api/simulation usa INVALID_DESTINATION.
+ * `toError`: por defecto 422 VALIDATION_ERROR; las rutas por robot usan INVALID_MOVE_REQUEST/INVALID_POSITION.
  */
 export function validate(
   schema: ZodTypeAny,

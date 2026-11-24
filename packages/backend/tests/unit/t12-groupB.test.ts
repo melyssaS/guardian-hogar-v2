@@ -37,6 +37,7 @@ const crosses = {
   authorized: false,
   nextState: 'SAFE_STOP',
   collisionType: 'TRAJECTORY_CROSSES_ZONE',
+  zoneName: 'Escaleras',
   reason: expect.any(String),
 };
 

@@ -19,22 +19,32 @@ import { createTestDb } from '../helpers.js';
  *
  * Las aserciones reflejan las formas reales que produce `guardianService` y que `robotController`
  * deja pasar sin transformar (AUTHORIZED/DENIED → 200, REJECTED → 409, payload inválido → 422).
+ *
+ * [RC-20] Tras la retirada de `/api/robot/*`, el mismo contrato se ejercita por la API por robot
+ * (`/api/robots/1/*`, A1) sobre la app completa y con una sesión vigente; `move` añade la sesión
+ * y una secuencia creciente al cuerpo.
  */
-describe('API /api/robot', () => {
+describe('API /api/robots/1 (vigilante de A1, app completa)', () => {
   let db: Db;
   let app: Express;
-  beforeEach(() => {
+  let sessionId: string;
+  let sequence: number;
+  beforeEach(async () => {
     db = createTestDb();
     seedDefaultRooms(db);
     app = createApp(db, { corsOrigins: ['http://localhost:5173'] });
+    sessionId = (await request(app).post('/api/robots/1/sessions')).body.sessionId;
+    sequence = 0;
   });
 
-  const move = (body: unknown) =>
-    request(app)
-      .post('/api/robot/move')
-      .send(body as object);
-  const state = () => request(app).get('/api/robot/state');
-  const recover = () => request(app).post('/api/robot/recover');
+  const move = (body: object) => {
+    sequence += 1;
+    return request(app)
+      .post('/api/robots/1/move')
+      .send({ ...body, sessionId, sequence });
+  };
+  const state = () => request(app).get('/api/robots/1/state');
+  const recover = () => request(app).post('/api/robots/1/recover');
   const incidents = () => request(app).get('/api/incidents');
 
   // ── Estado ────────────────────────────────────────────────────────────────
@@ -43,9 +53,11 @@ describe('API /api/robot', () => {
       const res = await state();
       expect(res.status).toBe(200);
       expect(res.body).toEqual({
+        robotId: 1,
         state: 'IDLE',
         position: { x: 120, y: 90 },
         positionQuality: 'RELIABLE',
+        lastRequest: null,
       });
     });
   });
@@ -59,9 +71,11 @@ describe('API /api/robot', () => {
         decision: 'AUTHORIZED',
         state: 'IDLE',
         position: { x: 450, y: 120 },
+        robotId: 1,
+        positionQuality: 'RELIABLE',
       });
       // GET /state confirma la persistencia: IDLE en (450, 120), listo para el siguiente move.
-      expect((await state()).body).toEqual({
+      expect((await state()).body).toMatchObject({
         state: 'IDLE',
         position: { x: 450, y: 120 },
         positionQuality: 'RELIABLE',
@@ -85,7 +99,7 @@ describe('API /api/robot', () => {
       expect(typeof res.body.incidentId).toBe('number');
       expect(res.body.incidentId).toBeGreaterThan(0);
       // R3.3: la posición no cambia y el estado queda en parada.
-      expect((await state()).body).toEqual({
+      expect((await state()).body).toMatchObject({
         state: 'SAFE_STOP',
         position: { x: 120, y: 90 },
         positionQuality: 'RELIABLE',
@@ -108,10 +122,12 @@ describe('API /api/robot', () => {
         reason: expect.any(String),
         createdAt: expect.any(String),
       });
-      // zonesSnapshot presente: el snapshot incluye las zonas activas usadas en la decisión.
-      expect(Array.isArray(list.body[0].zonesSnapshot)).toBe(true);
-      expect(list.body[0].zonesSnapshot.length).toBeGreaterThan(0);
-      expect(list.body[0].zonesSnapshot).toContainEqual(
+      // El resumen no trae el snapshot; el detalle (R5.7) incluye las zonas activas usadas.
+      expect(list.body[0]).not.toHaveProperty('zonesSnapshot');
+      const detail = await request(app).get(`/api/incidents/${denied.body.incidentId}`);
+      expect(detail.status).toBe(200);
+      expect(Array.isArray(detail.body.zonesSnapshot)).toBe(true);
+      expect(detail.body.zonesSnapshot).toContainEqual(
         expect.objectContaining({ name: 'Escaleras', active: true }),
       );
     });
@@ -131,9 +147,11 @@ describe('API /api/robot', () => {
         state: 'SAFE_STOP',
         position: { x: 120, y: 90 },
         reason: expect.any(String),
+        robotId: 1,
+        positionQuality: 'RELIABLE',
       });
       // El estado y la posición no cambian por el rechazo.
-      expect((await state()).body).toEqual({
+      expect((await state()).body).toMatchObject({
         state: 'SAFE_STOP',
         position: { x: 120, y: 90 },
         positionQuality: 'RELIABLE',
@@ -147,12 +165,12 @@ describe('API /api/robot', () => {
   // ── Move: 422 payload inválido ──────────────────────────────────────────────
   describe('POST /move — 422 payload inválido', () => {
     it.each([[{}], [{ destination: { x: '1', y: 2 } }], [{ destination: { x: 1 } }]])(
-      'rechaza con INVALID_DESTINATION el payload %j (validate/Zod)',
+      'rechaza con INVALID_MOVE_REQUEST el payload %j (validate/Zod)',
       async (body) => {
         const res = await move(body);
         expect(res.status).toBe(422);
         expect(res.body).toEqual({
-          code: 'INVALID_DESTINATION',
+          code: 'INVALID_MOVE_REQUEST',
           message: expect.any(String),
         });
       },
@@ -166,7 +184,7 @@ describe('API /api/robot', () => {
         message: expect.any(String),
       });
       // El robot no cambia tras un payload fuera de límites.
-      expect((await state()).body).toEqual({
+      expect((await state()).body).toMatchObject({
         state: 'IDLE',
         position: { x: 120, y: 90 },
         positionQuality: 'RELIABLE',
@@ -175,7 +193,7 @@ describe('API /api/robot', () => {
 
     it('JSON mal formado → 400 sin exponer stack trace', async () => {
       const res = await request(app)
-        .post('/api/robot/move')
+        .post('/api/robots/1/move')
         .set('Content-Type', 'application/json')
         .send('{bad');
       expect(res.status).toBe(400);
@@ -193,11 +211,13 @@ describe('API /api/robot', () => {
       const res = await recover();
       expect(res.status).toBe(200);
       expect(res.body).toEqual({
-        recovered: true,
+        robotId: 1,
         state: 'IDLE',
         position: { x: 120, y: 90 },
+        positionQuality: 'RELIABLE',
+        transitioned: true,
       });
-      expect((await state()).body).toEqual({
+      expect((await state()).body).toMatchObject({
         state: 'IDLE',
         position: { x: 120, y: 90 },
         positionQuality: 'RELIABLE',
@@ -208,21 +228,62 @@ describe('API /api/robot', () => {
       expect(after.body.decision).toBe('AUTHORIZED');
     });
 
-    it('rechaza la recuperación cuando el robot no está en parada (IDLE) → 409 sin efectos', async () => {
+    it('en IDLE la recuperación es idempotente → 200 transitioned:false y sin efectos (R4.5)', async () => {
       const res = await recover();
-      expect(res.status).toBe(409);
-      expect(res.body).toMatchObject({
-        recovered: false,
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        robotId: 1,
         state: 'IDLE',
         position: { x: 120, y: 90 },
-        reason: expect.any(String),
+        positionQuality: 'RELIABLE',
+        transitioned: false,
       });
       // Sin efectos: el estado permanece IDLE en la misma posición.
-      expect((await state()).body).toEqual({
+      expect((await state()).body).toMatchObject({
         state: 'IDLE',
         position: { x: 120, y: 90 },
         positionQuality: 'RELIABLE',
       });
+    });
+  });
+
+  describe('POST /recover — 409 RECOVERY_NOT_ALLOWED (R4.4, Property 16)', () => {
+    it('posición insegura: 409 { code, cause, message }, estado sin cambios y fila de auditoría', async () => {
+      db.prepare(
+        "UPDATE robot_state SET state = 'SAFE_STOP', pos_x = 100, pos_y = 300 WHERE robot_id = 1",
+      ).run();
+
+      const res = await recover();
+
+      expect(res.status).toBe(409);
+      expect(res.body).toEqual({
+        code: 'RECOVERY_NOT_ALLOWED',
+        cause: 'UNSAFE_POSITION',
+        message: expect.any(String),
+      });
+      expect((await state()).body).toMatchObject({
+        state: 'SAFE_STOP',
+        position: { x: 100, y: 300 },
+        positionQuality: 'RELIABLE',
+      });
+      // La fila se lee DESPUÉS de la respuesta 409: el rechazo quedó confirmado.
+      // (la sesión que abre cada prueba deja su propia fila SESSION_STARTED, que se descarta).
+      expect(
+        db
+          .prepare(
+            "SELECT robot_id, event_code, state FROM audit_log WHERE event_code <> 'SESSION_STARTED'",
+          )
+          .all(),
+      ).toEqual([{ robot_id: 1, event_code: 'RECOVERY_NOT_ALLOWED', state: 'SAFE_STOP' }]);
+    });
+
+    it('calidad no confiable: cause UNRELIABLE_DATA', async () => {
+      db.prepare(
+        "UPDATE robot_state SET state = 'DEGRADED', position_quality = 'UNRELIABLE' WHERE robot_id = 1",
+      ).run();
+      const res = await recover();
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({ code: 'RECOVERY_NOT_ALLOWED', cause: 'UNRELIABLE_DATA' });
     });
   });
 
@@ -234,7 +295,7 @@ describe('API /api/robot', () => {
       expect(res.body).toEqual([]);
     });
 
-    it('cada denegación que para añade un incidente; se listan en orden de inserción', async () => {
+    it('cada denegación que para añade un incidente; se listan del más reciente al más antiguo', async () => {
       // Primera denegación (Escaleras).
       const d1 = await move({ destination: { x: 100, y: 300 } });
       await recover(); // libera la parada para poder volver a evaluar geometría
@@ -244,14 +305,24 @@ describe('API /api/robot', () => {
       const list = await incidents();
       expect(list.status).toBe(200);
       expect(list.body).toHaveLength(2);
-      // Orden append-only: el primero creado va primero y los ids son crecientes.
+      // Más reciente primero y los ids son crecientes en el tiempo (RC-14, R5.6).
       expect(list.body.map((i: { id: number }) => i.id)).toEqual([
-        d1.body.incidentId,
         d2.body.incidentId,
+        d1.body.incidentId,
       ]);
       expect(d2.body.incidentId).toBeGreaterThan(d1.body.incidentId);
-      expect(list.body[0]).toMatchObject({ destination: { x: 100, y: 300 } });
-      expect(list.body[1]).toMatchObject({ destination: { x: 300, y: 300 } });
+      expect(list.body[0]).toMatchObject({
+        destination: { x: 300, y: 300 },
+        robotId: 1,
+        rule: 'R-ZONA-01',
+        zoneName: 'Cuarto del bebé',
+      });
+      expect(list.body[1]).toMatchObject({
+        destination: { x: 100, y: 300 },
+        robotId: 1,
+        rule: 'R-ZONA-01',
+        zoneName: 'Escaleras',
+      });
     });
   });
 });

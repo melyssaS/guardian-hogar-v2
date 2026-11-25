@@ -461,6 +461,7 @@ packages/backend/src/
 | **[RC-01 rev2]** Alta en zona activa (spec 003) | 409 | `{ code: 'ROBOT_START_IN_RESTRICTED_ZONE', message }` |
 | **[RC-01 rev4]** Alta con zonas no legibles (spec 003) | 409 | `{ code: 'ROBOT_START_NOT_VERIFIABLE', message, cause: 'ZONE_DATA_UNAVAILABLE' }` |
 | **[RC-01 rev2]** Cuerpo de `move` inválido | 422 | `{ code: 'INVALID_MOVE_REQUEST', message }` |
+| **[spec 006]** `severity` inválida en `GET /api/incidents` | 422 | `{ code: 'INVALID_SEVERITY_FILTER', message }` |
 
 **[RC-01] Rutas tras el refuerzo**
 ```

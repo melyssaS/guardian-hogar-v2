@@ -1,5 +1,6 @@
 import {
   ruleForDecision,
+  severityForDecision,
   type CollisionType,
   type Incident,
   type IncidentCode,
@@ -8,6 +9,7 @@ import {
   type RobotId,
   type RobotStateName,
   type RuleId,
+  type Severity,
   type Zone,
 } from '@home-guardian/domain';
 import type { Db } from '../db/connection.js';
@@ -33,9 +35,13 @@ export interface IncidentInput {
   reason: string;
 }
 
-/** Filtro opcional de `findAll` (GET /api/incidents?robotId=). */
+/**
+ * Filtros opcionales de `findAll` (GET /api/incidents?robotId=&severity=). La severidad no es una
+ * columna: se deriva del `decision_code` (spec 006 DD-601), así que se filtra tras mapear.
+ */
 export interface IncidentFilter {
   robotId?: RobotId;
+  severity?: Severity;
 }
 
 /** Registro append-only: solo inserción y lectura (R5.4, DD-205). */
@@ -83,6 +89,7 @@ function toIncident(row: IncidentRow): Incident {
     rule,
     zoneName: row.zone_name,
     decisionCode: row.decision_code,
+    severity: severityForDecision(row.decision_code),
     collisionType: row.collision_type,
     stateAfter: row.state_after,
     origin: { x: row.origin_x, y: row.origin_y },
@@ -143,7 +150,10 @@ export function createIncidentRepository(db: Db): IncidentRepository {
     findAll(filter) {
       const rows =
         filter?.robotId === undefined ? findAllStmt.all() : findByRobotStmt.all(filter.robotId);
-      return rows.map(toIncident);
+      const incidents = rows.map(toIncident);
+      return filter?.severity === undefined
+        ? incidents
+        : incidents.filter((i) => i.severity === filter.severity);
     },
     findById(id) {
       const row = findByIdStmt.get(id);

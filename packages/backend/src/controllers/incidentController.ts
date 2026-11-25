@@ -13,11 +13,19 @@ export function createIncidentController(
   catalog: Pick<RobotCatalogRepository, 'findById'>,
 ) {
   return {
-    /** GET /api/incidents[?robotId=] — del más reciente al más antiguo (R5.6). */
+    /**
+     * GET /api/incidents[?robotId=][&severity=] — del más reciente al más antiguo (R5.6). Solo
+     * transporta los filtros; la severidad la deriva y filtra el repositorio (spec 006 DD-606).
+     */
     list(req: Request, res: Response): void {
-      const { robotId } = req.query as IncidentListQuery;
+      const { robotId, severity } = req.query as IncidentListQuery;
       if (robotId !== undefined && catalog.findById(robotId) === null) throw robotNotFound(robotId);
-      res.json(incidents.findAll(robotId === undefined ? {} : { robotId }));
+      res.json(
+        incidents.findAll({
+          ...(robotId === undefined ? {} : { robotId }),
+          ...(severity === undefined ? {} : { severity }),
+        }),
+      );
     },
     /** GET /api/incidents/:id — detalle con `zonesSnapshot` (R5.7). */
     get(req: Request, res: Response): void {

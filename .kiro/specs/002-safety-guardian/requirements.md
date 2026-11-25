@@ -468,6 +468,7 @@ Los incidentes anteriores al refuerzo (sin `robot_id`) se devuelven con `robotId
 | **[RC-01]** Validación | `INVALID_DESTINATION` / `INVALID_POSITION` | Payload inválido (422) *(Sustituido por RC-01 rev3 en `move`: `INVALID_MOVE_REQUEST`; `INVALID_POSITION` sigue vigente en `position`)* |
 | **[RC-01]** Causa de transición | `POSITION_QUALITY_LOST` | Señal de pérdida en `IDLE` → `DEGRADED` |
 | **[RC-01 rev2]** Validación | `INVALID_MOVE_REQUEST` | Cuerpo de `move` inválido (sin `destination`, `sessionId` o `sequence`) (422) |
+| **[spec 006]** Validación | `INVALID_SEVERITY_FILTER` | `severity` de `GET /api/incidents` fuera de `LOW`/`MEDIUM`/`HIGH`/`CRITICAL` (422); los incidentes ganan el campo `severity` derivado del `decisionCode` |
 | **[RC-01 rev2]** Alta | `ROBOT_START_IN_RESTRICTED_ZONE` | Posición inicial dentro de una zona activa (409) |
 | **[RC-01 rev4]** Alta | `ROBOT_START_NOT_VERIFIABLE` | No se pueden leer las zonas para validar la posición inicial; `cause: ZONE_DATA_UNAVAILABLE` (409). Decisión humana (art. XIII) |
 | **[RC-01 rev2]** Incidente | `POSITION_QUALITY_LOST` (`decision_code`) | Pérdida de señal en `IDLE`, regla `R-SIGNAL-01` |

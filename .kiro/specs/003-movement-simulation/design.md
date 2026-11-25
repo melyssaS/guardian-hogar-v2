@@ -323,7 +323,7 @@ function assertWithinFloor(p: Point) {
 > │                                    #   coordenadas, "Enviar a escaleras", "Nueva sesión",
 > │                                    #   "Liberar parada", DecisionPanel, TelemetryPanel
 > ├── pages/RobotsPage.tsx             # tarjetas de robots + modal "Registrar robot"
-> ├── pages/IncidentsPage.tsx          # bitácora + detalle; HU-06/HU-07 deshabilitados
+> ├── pages/IncidentsPage.tsx          # bitácora + detalle; filtro por severidad (spec 006); HU-07 deshabilitado
 > ├── components/FloorPlan.tsx         # dibuja N robots (color por estado/tipo) y captura clic
 > ├── components/CoordInput.tsx        # sin cambios de contrato (emite Point)
 > ├── components/DecisionPanel.tsx     # AUTHORIZED / DENIED / REJECTED tal como llegan
@@ -607,7 +607,7 @@ devuelta por la API para ese robot.
 > | Unit (rules) | `checkSequence` | sesión vigente/ajena/nula, secuencia mayor/igual/menor, primera solicitud |
 > | Unit (service) | `robotCatalogService`, `sessionService` | estado inicial asignado, nombre 1–60 y duplicado, nueva sesión invalida la anterior, última solicitud persistida |
 > | Integración (Supertest) | `/api/robots`, sesiones, `move` con sesión | 201/422/409/404, `INVALID_SESSION`, `DUPLICATE_EVENT` sin incidente y auditado, `/api/simulation/*` → 404 |
-> | Componentes (RTL) | páginas y componentes nuevos | DecisionPanel con AUTHORIZED/DENIED/REJECTED sin código inventado; RobotsPage + modal; IncidentsPage tabla/detalle/vacío y botones HU-06/07 deshabilitados; TelemetryPanel muestra el JSON tal cual; recover con `transitioned` y con `cause`; selector de robot; "Enviar a escaleras" con zona activa e inactiva; escaneo estático: la UI no importa reglas |
+> | Componentes (RTL) | páginas y componentes nuevos | DecisionPanel con AUTHORIZED/DENIED/REJECTED sin código inventado; RobotsPage + modal; IncidentsPage tabla/detalle/vacío y botón HU-07 deshabilitado (el filtro HU-06 lo prueba la spec 006); TelemetryPanel muestra el JSON tal cual; recover con `transitioned` y con `cause`; selector de robot; "Enviar a escaleras" con zona activa e inactiva; escaneo estático: la UI no importa reglas |
 > | E2E (Playwright) | flujos del prototipo | registrar robot → aparece en el plano; clic en zona → DENIED y el incidente aparece en "Incidentes"; nuevo movimiento → REJECTED; recover → IDLE; recover rechazado con UNSAFE_POSITION; sesión duplicada → DUPLICATE_EVENT |
 >
 > **[RC-01 rev2] Añadidos:** prueba por cada `409` auditado que lee `audit_log` después de la

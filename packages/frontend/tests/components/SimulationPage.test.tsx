@@ -523,6 +523,7 @@ describe('SimulationPage', () => {
       rule,
       zoneName: null,
       decisionCode: rule === 'R-SIGNAL-01' ? 'POSITION_QUALITY_LOST' : 'RESTRICTED_ZONE_VIOLATION',
+      severity: rule === 'R-SIGNAL-01' ? 'LOW' : 'HIGH',
       collisionType: null,
       stateAfter: 'SAFE_STOP',
       origin: HOME,

@@ -55,6 +55,10 @@ export const positionOutOfBounds = () =>
 export const robotNotFound = (id: number) =>
   new AppError(404, 'ROBOT_NOT_FOUND', `Robot ${id} not found`);
 
+// Spec 006 (HU-06) — `severity` de GET /api/incidents fuera de LOW | MEDIUM | HIGH | CRITICAL
+export const invalidSeverityFilter = (message: string) =>
+  new AppError(422, 'INVALID_SEVERITY_FILTER', message);
+
 // Spec 002 — incidente inexistente (R5.7)
 export const incidentNotFound = (id: number) =>
   new AppError(404, 'INCIDENT_NOT_FOUND', `Incident ${id} not found`);

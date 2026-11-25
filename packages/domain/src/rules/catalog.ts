@@ -48,6 +48,34 @@ export const RULES: readonly Rule[] = [
   },
 ];
 
+/** Severidad de un incidente (spec 006, HU-06). Mismo orden que el enum histórico de architecture.md. */
+export type Severity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+/** Códigos que nunca generan incidente: no tienen severidad (spec 006 DD-602). */
+type NonIncidentCode = 'AUTHORIZED' | 'SAFE_STOP_ACTIVE' | 'BUSY';
+
+/** Severidad por código de incidente (spec 006 requirements §3.1). TypeScript exige cubrir los 7. */
+const SEVERITY_BY_CODE: Readonly<Record<Exclude<IncidentCode, NonIncidentCode>, Severity>> = {
+  ORIGIN_IN_RESTRICTED_ZONE: 'CRITICAL',
+  RESTRICTED_ZONE_VIOLATION: 'HIGH',
+  ZONE_DATA_UNAVAILABLE: 'HIGH',
+  TRAJECTORY_CROSSES_ZONE: 'MEDIUM',
+  INSUFFICIENT_DATA: 'MEDIUM',
+  MISSING_POSITION: 'MEDIUM',
+  POSITION_QUALITY_LOST: 'LOW',
+};
+
+/**
+ * Pura. Severidad derivada del código de un incidente. Lanza ante un código que no genera
+ * incidente (`AUTHORIZED`, `SAFE_STOP_ACTIVE`, `BUSY`): nunca inventa una severidad.
+ */
+export function severityForDecision(code: IncidentCode): Severity {
+  const severity = (SEVERITY_BY_CODE as Partial<Record<IncidentCode, Severity>>)[code];
+  if (severity === undefined)
+    throw new Error(`no severity for code ${code}: it creates no incident`);
+  return severity;
+}
+
 /**
  * Pura. Devuelve la regla que cubre un código de incidente o `null` si no es una denegación
  * (`AUTHORIZED`, `SAFE_STOP_ACTIVE`, `BUSY`). `POSITION_QUALITY_LOST` pertenece a `R-SIGNAL-01`.

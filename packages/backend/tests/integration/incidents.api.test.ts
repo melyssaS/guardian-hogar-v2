@@ -70,6 +70,7 @@ describe('API /api/incidents (contrato por robot)', () => {
       rule: 'R-ZONA-01',
       zoneName: 'Escaleras',
       decisionCode: 'TRAJECTORY_CROSSES_ZONE',
+      severity: 'MEDIUM',
       collisionType: 'TRAJECTORY_CROSSES_ZONE',
       stateAfter: 'SAFE_STOP',
       origin: { x: 120, y: 90 },

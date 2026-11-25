@@ -20,4 +20,5 @@ export type {
   RobotType,
   RuleId,
   SessionInfo,
+  Severity,
 } from '@home-guardian/domain';

@@ -1,6 +1,7 @@
 import { incidentIdParamSchema, incidentListQuerySchema } from '@home-guardian/domain';
 import { Router } from 'express';
 import { createIncidentController } from '../controllers/incidentController.js';
+import { invalidSeverityFilter, validationError } from '../errors/AppError.js';
 import { validate } from '../middlewares/validate.js';
 import type { IncidentRepository } from '../repositories/incidentRepository.js';
 import type { RobotCatalogRepository } from '../repositories/robotCatalogRepository.js';
@@ -13,7 +14,12 @@ export function createIncidentRoutes(
   const c = createIncidentController(incidents, catalog);
   const router = Router();
 
-  router.get('/', validate(incidentListQuerySchema, 'query'), c.list);
+  // Spec 006 DD-604/605: un solo esquema (`robotId` primero). `validate` compone el mensaje como
+  // "<path>: <detalle>"; si el primer problema es de `severity` el código es INVALID_SEVERITY_FILTER,
+  // y si es de `robotId` (también cuando ambos fallan) se conserva VALIDATION_ERROR.
+  const listQueryError = (message: string) =>
+    message.startsWith('severity') ? invalidSeverityFilter(message) : validationError(message);
+  router.get('/', validate(incidentListQuerySchema, 'query', listQueryError), c.list);
   router.get('/:id', validate(incidentIdParamSchema, 'params'), c.get);
 
   return router;

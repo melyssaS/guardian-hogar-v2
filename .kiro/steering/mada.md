@@ -79,7 +79,7 @@ Esta cadena debe ser demostrable en la sustentación.
 | HU-04 | Línea base | — |
 | HU-05 | Línea base | — |
 | HU-06 | Reservada demo | Sergio |
-| HU-07 | Reservada demo | Julian |
+| HU-07 | Reservada demo | Melyssa |
 | HU-08 | Reservada demo | Melyssa |
 | HU-09 | Reservada demo | July |
 | HU-10 | Comodín demo | Melyssa (backup) |

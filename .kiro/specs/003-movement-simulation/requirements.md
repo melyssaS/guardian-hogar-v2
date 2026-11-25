@@ -229,7 +229,7 @@ revisar el comportamiento del Guardián.
 1. WHEN el operador abre la vista "Incidentes" THEN la UI SHALL listar los incidentes de `GET /api/incidents` del más reciente al más antiguo, en una tabla Fecha · Robot · Regla · Zona · Decisión, con el contador "N eventos".
 2. WHEN el operador selecciona un incidente THEN la UI SHALL mostrar su detalle (`GET /api/incidents/:id`): regla, código de decisión, tipo de colisión, origen, destino, estado resultante, motivo y snapshot de zonas.
 3. WHEN no hay incidentes THEN la UI SHALL mostrar un estado vacío explícito.
-4. WHEN se muestran los botones "Filtrar por severidad · HU-06" y "Exportar CSV · HU-07" THEN SHALL estar deshabilitados (HU reservadas), como en el prototipo.
+4. WHEN se muestran los botones "Filtrar por severidad · HU-06" y "Exportar CSV · HU-07" THEN SHALL estar deshabilitados (HU reservadas), como en el prototipo. **[007]** Para HU-07: sustituido por la spec 007 CA-07.10 (el botón "Exportar CSV · HU-07" se habilita); HU-06 sigue deshabilitado (007 CA-07.14).
 5. WHEN la UI muestra un incidente THEN NO SHALL modificarlo ni recalcularlo: es de solo lectura.
 6. **[RC-01 rev2]** WHEN existe un incidente por pérdida de señal (`rule = R-SIGNAL-01`, `decisionCode = POSITION_QUALITY_LOST`, sin zona) THEN la tabla SHALL mostrarlo como cualquier otro, con "—" en la columna Zona.
 
@@ -515,7 +515,7 @@ Cubren los requisitos que no tenían CA (M-6) y las decisiones Q-B, Q-D, Q-E y B
 - **CA-03.26 (R9.3)** Dada una base sin incidentes, cuando el operador abre "Incidentes",
   entonces ve un estado vacío explícito y el contador "0 eventos".
 - **CA-03.27 (R9.4)** Dada la vista "Incidentes", cuando se muestra, entonces los botones
-  "Filtrar por severidad · HU-06" y "Exportar CSV · HU-07" están deshabilitados.
+  "Filtrar por severidad · HU-06" y "Exportar CSV · HU-07" están deshabilitados. **[007]** HU-07: sustituido por la spec 007 CA-07.10; queda solo HU-06 deshabilitado (007 CA-07.14).
 - **CA-03.28 (R10.1)** Dada la aplicación abierta, cuando se muestra la barra lateral, entonces
   ofrece Supervisión, Robots simulados, Zonas y reglas e Incidentes, y cada entrada abre su vista.
   **[RC-01 rev3]** Y no ofrece "Visión general" ni ninguna entrada del grupo "Ingeniería · SDD".
@@ -707,6 +707,7 @@ HU-03
 | 2026-11-23 | **RC-01 rev2** (pendiente de aprobación) | Resuelve el informe del analista sobre RC-01 con las decisiones del humano. Detalle por hallazgo abajo. |
 | 2026-11-23 | **RC-01 rev3** (pendiente de aprobación) | Ronda final del analista (N-1..N-18), Q-I y vistas excluidas. Detalle abajo. |
 | 2026-11-23 | **RC-01 rev4** (pendiente de aprobación) | Pasada del analista sobre la rev3 local (B-1, I-1..I-7, M-1..M-11) y 4 decisiones del humano. Detalle abajo. |
+| 2026-11-24 | **007** (aprobado por el humano) | HU-07 se implementa como demo en vivo (spec `specs/007-export-incidents-csv`). RF-09.4 y CA-03.27 quedan sustituidos para HU-07 por 007 CA-07.10; HU-06 sigue deshabilitado (007 CA-07.14). |
 
 ### RC-01 rev2 — resolución por hallazgo
 

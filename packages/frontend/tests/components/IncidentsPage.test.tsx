@@ -1,10 +1,11 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IncidentsPage } from '../../src/pages/IncidentsPage';
 import type { Incident, IncidentDetail, Zone } from '../../src/types';
 
 // Spec 003 — RC-16/RC-17 (RF-09.1..RF-09.6; CA-03.15, CA-03.26, CA-03.27).
+// Spec 007 — T8 (CA-07.10..CA-07.14): exportación CSV de HU-07.
 const stairs: Zone = {
   id: 3,
   name: 'Escaleras',
@@ -46,15 +47,29 @@ const signalIncident: Incident = {
   createdAt: '2025-03-04T15:00:00.000Z',
 };
 
+const CSV = '\uFEFFid,robotId\r\n2,1';
+const csvResponse = (body: string, filename: string | null = 'incidentes-2026-11-23.csv') =>
+  new Response(body, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      ...(filename === null ? {} : { 'Content-Disposition': `attachment; filename="${filename}"` }),
+    },
+  });
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
     headers: { 'Content-Type': 'application/json' },
   });
 
-function install(incidents: Incident[], failList = false) {
+function install(
+  incidents: Incident[],
+  failList = false,
+  exportResponse: () => Promise<Response> = async () => csvResponse(CSV),
+) {
   const detail = (i: Incident): IncidentDetail => ({ ...i, zonesSnapshot: [stairs] });
   const fetchMock = vi.fn(async (url: string) => {
+    if (url.startsWith('/api/incidents/export')) return exportResponse();
     if (url === '/api/incidents') {
       return failList ? json({ code: 'INTERNAL_ERROR', message: 'Fallo' }, 500) : json(incidents);
     }
@@ -126,13 +141,15 @@ describe('IncidentsPage', () => {
     expect(within(row).getByText('POSITION_QUALITY_LOST')).toBeInTheDocument();
   });
 
-  it('CA-03.27 los botones HU-06 y HU-07 están deshabilitados', async () => {
+  it('CA-03.27 / CA-07.14 HU-06 sigue deshabilitado y la nota solo menciona HU-06', async () => {
     install([zoneIncident]);
     render(<IncidentsPage />);
     await screen.findByRole('table');
 
     expect(screen.getByRole('button', { name: /Filtrar por severidad · HU-06/ })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /Exportar CSV · HU-07/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Exportar CSV · HU-07/ })).toBeEnabled();
+    expect(screen.getByText('HU-06 está reservada, no implementada.')).toBeInTheDocument();
+    expect(screen.queryByText(/Estas historias están reservadas/)).not.toBeInTheDocument();
   });
 
   it('RF-09.5 es de solo lectura: solo se hacen GET', async () => {
@@ -150,5 +167,98 @@ describe('IncidentsPage', () => {
     install([], true);
     render(<IncidentsPage />);
     expect(await screen.findByRole('alert')).toHaveTextContent('INTERNAL_ERROR');
+  });
+});
+
+describe('IncidentsPage — exportar CSV (spec 007)', () => {
+  const createObjectURL = vi.fn((_blob: Blob) => 'blob:incidentes');
+  const revokeObjectURL = vi.fn((_url: string) => undefined);
+  let downloads: string[];
+
+  beforeEach(() => {
+    createObjectURL.mockClear();
+    revokeObjectURL.mockClear();
+    Object.assign(URL, { createObjectURL, revokeObjectURL });
+    downloads = [];
+    // Captura el clic del ancla temporal sin navegar (jsdom no implementa la descarga).
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      downloads.push(this.download);
+    });
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  const exportButton = () =>
+    screen.getByRole('button', { name: /Exportar CSV · HU-07|Exportando…/ });
+
+  it('CA-07.10 un único GET /api/incidents/export sin query y descarga con el filename de la cabecera', async () => {
+    const fetchMock = install([zoneIncident]);
+    render(<IncidentsPage />);
+    await screen.findByRole('table');
+    await userEvent.click(exportButton());
+    await vi.waitFor(() => expect(downloads).toEqual(['incidentes-2026-11-23.csv']));
+    const exportCalls = (fetchMock.mock.calls as unknown as [string, RequestInit?][]).filter(
+      ([u]) => u.startsWith('/api/incidents/export'),
+    );
+    expect(exportCalls).toHaveLength(1);
+    expect(exportCalls[0]?.[0]).toBe('/api/incidents/export');
+    expect(exportCalls[0]?.[1]?.method ?? 'GET').toBe('GET');
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:incidentes');
+  });
+
+  it('CA-07.10 sin Content-Disposition usa incidentes.csv', async () => {
+    install([zoneIncident], false, async () => csvResponse(CSV, null));
+    render(<IncidentsPage />);
+    await screen.findByRole('table');
+    await userEvent.click(exportButton());
+    await vi.waitFor(() => expect(downloads).toEqual(['incidentes.csv']));
+  });
+
+  it('CA-07.11 el blob descargado tiene exactamente los bytes recibidos (BOM incluido)', async () => {
+    install([zoneIncident]);
+    render(<IncidentsPage />);
+    await screen.findByRole('table');
+    await userEvent.click(exportButton());
+    await vi.waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
+    const blob = createObjectURL.mock.calls[0]?.[0];
+    expect(blob).toBeInstanceOf(Blob);
+    // jsdom no implementa Blob.arrayBuffer: se leen los bytes con FileReader.
+    const buffer = await new Promise<ArrayBuffer>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.readAsArrayBuffer(blob as Blob);
+    });
+    const received = new Uint8Array(buffer);
+    expect([...received]).toEqual([...new TextEncoder().encode(CSV)]);
+  });
+
+  it('CA-07.12 mientras exporta, el botón está deshabilitado con "Exportando…"', async () => {
+    let release: (res: Response) => void = () => undefined;
+    install([zoneIncident], false, () => new Promise<Response>((resolve) => (release = resolve)));
+    render(<IncidentsPage />);
+    await screen.findByRole('table');
+    await userEvent.click(exportButton());
+    const busy = await screen.findByRole('button', { name: 'Exportando…' });
+    expect(busy).toBeDisabled();
+    release(csvResponse(CSV));
+    const idle = await screen.findByRole('button', { name: /Exportar CSV · HU-07/ });
+    expect(idle).toBeEnabled();
+  });
+
+  it('CA-07.13 si el backend responde error, muestra el message y no descarga', async () => {
+    install([zoneIncident], false, async () =>
+      json({ code: 'ROBOT_NOT_FOUND', message: 'No se pudo exportar' }, 404),
+    );
+    render(<IncidentsPage />);
+    await screen.findByRole('table');
+    await userEvent.click(exportButton());
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo exportar');
+    expect(createObjectURL).not.toHaveBeenCalled();
+    expect(downloads).toEqual([]);
+    expect(exportButton()).toBeEnabled();
   });
 });

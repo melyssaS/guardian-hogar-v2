@@ -2,10 +2,14 @@ import { IncidentDetail } from '../components/IncidentDetail';
 import { IncidentTable } from '../components/IncidentTable';
 import { useIncidents } from '../hooks/useIncidents';
 
-/** Vista "Incidentes" (HU-05, parte UI): bitácora y detalle, solo lectura (spec 003 RF-09). */
+/**
+ * Vista "Incidentes" (HU-05, parte UI): bitácora y detalle, solo lectura (spec 003 RF-09).
+ * HU-07 (spec 007): exportar CSV; el archivo lo genera el backend.
+ */
 export function IncidentsPage() {
-  const { incidents, detail, status, select } = useIncidents();
-  const error = status.list.error ?? status.detail.error;
+  const { incidents, detail, status, select, exportCsv } = useIncidents();
+  const error = status.list.error ?? status.detail.error ?? status.export.error;
+  const exporting = status.export.loading;
 
   return (
     <>
@@ -47,6 +51,7 @@ export function IncidentsPage() {
             </span>
           </div>
           <div className="controls">
+            {/* HU-06: filtrar por severidad — reservado para demo en vivo */}
             <button
               type="button"
               className="btn tight"
@@ -58,12 +63,13 @@ export function IncidentsPage() {
             <button
               type="button"
               className="btn tight"
-              disabled
-              title="HU-07, reservada para la demostración en clase"
+              disabled={exporting}
+              title="Descargar los incidentes en CSV"
+              onClick={() => void exportCsv()}
             >
-              Exportar CSV · HU-07 ⌛
+              {exporting ? 'Exportando…' : 'Exportar CSV · HU-07'}
             </button>
-            <span className="note-line">Estas historias están reservadas, no implementadas.</span>
+            <span className="note-line">HU-06 está reservada, no implementada.</span>
           </div>
           <IncidentTable
             incidents={incidents}

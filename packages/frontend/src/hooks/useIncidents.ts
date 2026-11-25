@@ -3,7 +3,7 @@ import { incidentsApi, type IncidentsApi } from '../api/client';
 import type { Incident, IncidentDetail } from '../types';
 import { messageOf, type OperationState } from './useRobot';
 
-export type IncidentsOperation = 'list' | 'detail';
+export type IncidentsOperation = 'list' | 'detail' | 'export';
 
 const idle: OperationState = { loading: false, error: null };
 
@@ -17,6 +17,7 @@ export function useIncidents(api: IncidentsApi = incidentsApi) {
   const [status, setStatus] = useState<Record<IncidentsOperation, OperationState>>({
     list: { loading: true, error: null },
     detail: idle,
+    export: idle,
   });
 
   const setOp = (op: IncidentsOperation, state: OperationState) =>
@@ -50,5 +51,27 @@ export function useIncidents(api: IncidentsApi = incidentsApi) {
     [api],
   );
 
-  return { incidents, detail, status, refresh, select };
+  /**
+   * HU-07 (spec 007): descarga el CSV que genera el backend, sin tocarlo (CA-07.11). Solo crea la
+   * URL del blob si la respuesta fue correcta (CA-07.13).
+   */
+  const exportCsv = useCallback(async () => {
+    setOp('export', { loading: true, error: null });
+    try {
+      const { blob, filename } = await api.exportCsv();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setOp('export', idle);
+    } catch (err) {
+      setOp('export', { loading: false, error: messageOf(err) });
+    }
+  }, [api]);
+
+  return { incidents, detail, status, refresh, select, exportCsv };
 }

@@ -2,7 +2,7 @@ import type { CollisionType } from '../geometry/collision.js';
 import type { Point } from '../geometry/types.js';
 import type { Zone } from './zone.js';
 import type { RobotStateName, LastRequest } from './robot.js';
-import type { RuleId } from '../rules/catalog.js';
+import type { RuleId, Severity } from '../rules/catalog.js';
 
 /**
  * Calidad de la lectura de posición del robot (spec 002 §2, §5).
@@ -118,6 +118,8 @@ export interface Incident {
   rule: RuleId;
   zoneName: string | null;
   decisionCode: IncidentCode;
+  /** Severidad derivada del `decisionCode` por el backend (spec 006, HU-06). */
+  severity: Severity;
   collisionType: CollisionType | null;
   stateAfter: RobotStateName;
   origin: Point;

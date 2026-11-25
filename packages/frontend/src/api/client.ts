@@ -10,6 +10,7 @@ import type {
   RobotInput,
   RobotStatus,
   SessionInfo,
+  Severity,
   UpdateZoneBody,
   Zone,
   ZoneActiveFilter,
@@ -125,8 +126,15 @@ export type RobotsApi = typeof robotsApi;
 
 /** /api/incidents — solo lectura (spec 002 §6, spec 003 RF-09). */
 export const incidentsApi = {
-  list: (robotId?: number) =>
-    request<Incident[]>(`/api/incidents${robotId === undefined ? '' : `?robotId=${robotId}`}`),
+  /** `robotId` y `severity` son opcionales; sin ninguno pide exactamente `/api/incidents` (spec 006). */
+  list: (robotId?: number, severity?: Severity) => {
+    const params: string[] = [];
+    if (robotId !== undefined) params.push(`robotId=${robotId}`);
+    if (severity !== undefined) params.push(`severity=${severity}`);
+    return request<Incident[]>(
+      `/api/incidents${params.length === 0 ? '' : `?${params.join('&')}`}`,
+    );
+  },
   get: (id: number) => request<IncidentDetail>(`/api/incidents/${id}`),
 };
 

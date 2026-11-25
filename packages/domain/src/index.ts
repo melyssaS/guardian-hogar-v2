@@ -56,10 +56,14 @@ export type {
   ZoneActiveFilter,
 } from './schemas/zone.schema.js';
 export { positionSchema, robotIdParamSchema } from './schemas/robot.schema.js';
-export { incidentIdParamSchema, incidentListQuerySchema } from './schemas/incident.schema.js';
+export {
+  incidentIdParamSchema,
+  incidentListQuerySchema,
+  severitySchema,
+} from './schemas/incident.schema.js';
 export type { IncidentListQuery } from './schemas/incident.schema.js';
 export type { PositionBody } from './schemas/robot.schema.js';
-export { RULES, ruleForDecision } from './rules/catalog.js';
-export type { Rule, RuleId } from './rules/catalog.js';
+export { RULES, ruleForDecision, severityForDecision } from './rules/catalog.js';
+export type { Rule, RuleId, Severity } from './rules/catalog.js';
 export { robotInputSchema } from './schemas/robotCatalog.schema.js';
 export { moveCommandSchema } from './schemas/moveCommand.schema.js';

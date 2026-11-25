@@ -62,10 +62,12 @@ El frontend se ejecuta en contenedor para evitar instalar Node o npm en la máqu
 - Pruebas E2E en `tests/e2e/` con un archivo por página
 
 ## HU reservadas — regla crítica
-HU-06 a HU-10 NO se implementan en la línea base.
+HU-07, HU-08 y HU-10 NO se implementan en la línea base. **HU-06 (filtrar incidentes por severidad) salió de la
+reserva y se implementa en `specs/006-filter-incidents-by-severity/`** (ver su requirements.md §1.1; el
+registro formal de quién y cuándo está pendiente). Su botón deshabilitado en `IncidentsPage.tsx` se
+reemplazó por el filtro.
 Dejar placeholder en el lugar exacto:
 ```tsx
-{/* HU-06: filtrar por severidad — reservado para demo en vivo */}
 {/* HU-07: exportar CSV — reservado para demo en vivo */}
 {/* HU-08: conteos por tipo — reservado para demo en vivo */}
 {/* HU-09: buscar por nombre — reservado para demo en vivo */}

@@ -12,6 +12,7 @@ const summary: Incident = {
   rule: 'R-ZONA-01',
   zoneName: 'Escaleras',
   decisionCode: 'RESTRICTED_ZONE_VIOLATION',
+  severity: 'HIGH',
   collisionType: 'RESTRICTED_ZONE_VIOLATION',
   stateAfter: 'SAFE_STOP',
   origin: { x: 10, y: 20 },
@@ -63,6 +64,51 @@ describe('incidentController', () => {
     );
     expect(() =>
       controller.list({ query: { robotId: 9 } } as unknown as Request, {} as Response),
+    ).toThrowError(expect.objectContaining({ status: 404, code: 'ROBOT_NOT_FOUND' }));
+    expect(findAll).not.toHaveBeenCalled();
+  });
+
+  // Spec 006 — HU-06, tarea 7 (CA-06.1, CA-06.7): el controlador solo transporta el filtro.
+  it('CA-06.1 list pasa severity al repositorio y responde sin filtrar por su cuenta', () => {
+    const findAll = vi.fn(() => [summary]);
+    const controller = createIncidentController(
+      { findAll } as unknown as IncidentRepository,
+      catalog([1]),
+    );
+    const json = vi.fn();
+    controller.list(
+      { query: { severity: 'LOW' } } as unknown as Request,
+      { json } as unknown as Response,
+    );
+    expect(findAll).toHaveBeenCalledWith({ severity: 'LOW' });
+    // `summary` es HIGH: si el controlador filtrara por su cuenta, no lo devolvería.
+    expect(json).toHaveBeenCalledWith([summary]);
+  });
+
+  it('CA-06.7 list con robotId existente y severity pasa ambos', () => {
+    const findAll = vi.fn(() => [summary]);
+    const controller = createIncidentController(
+      { findAll } as unknown as IncidentRepository,
+      catalog([1]),
+    );
+    controller.list(
+      { query: { robotId: 1, severity: 'HIGH' } } as unknown as Request,
+      { json: vi.fn() } as unknown as Response,
+    );
+    expect(findAll).toHaveBeenCalledWith({ robotId: 1, severity: 'HIGH' });
+  });
+
+  it('CA-06.7 con robotId inexistente y severity lanza 404 sin consultar incidentes', () => {
+    const findAll = vi.fn();
+    const controller = createIncidentController(
+      { findAll } as unknown as IncidentRepository,
+      catalog([1]),
+    );
+    expect(() =>
+      controller.list(
+        { query: { robotId: 9, severity: 'HIGH' } } as unknown as Request,
+        {} as Response,
+      ),
     ).toThrowError(expect.objectContaining({ status: 404, code: 'ROBOT_NOT_FOUND' }));
     expect(findAll).not.toHaveBeenCalled();
   });

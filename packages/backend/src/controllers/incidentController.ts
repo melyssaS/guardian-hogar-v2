@@ -1,4 +1,4 @@
-import type { IncidentListQuery } from '@home-guardian/domain';
+import { countIncidentsByType, type IncidentListQuery } from '@home-guardian/domain';
 import type { Request, Response } from 'express';
 import { incidentNotFound, robotNotFound } from '../errors/AppError.js';
 import type { IncidentRepository } from '../repositories/incidentRepository.js';
@@ -36,6 +36,10 @@ export function createIncidentController(
           ...(severity === undefined ? {} : { severity }),
         }),
       );
+    },
+    /** GET /api/incidents/counts — conteo por tipo (regla) y total, global y sin filtros (HU-08). */
+    counts(_req: Request, res: Response): void {
+      res.json(countIncidentsByType(incidents.findAll({})));
     },
     /** GET /api/incidents/:id — detalle con `zonesSnapshot` (R5.7). */
     get(req: Request, res: Response): void {

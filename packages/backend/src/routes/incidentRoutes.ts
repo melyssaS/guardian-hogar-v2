@@ -25,8 +25,10 @@ export function createIncidentRoutes(
   const listQueryError = (message: string) =>
     message.startsWith('severity') ? invalidSeverityFilter(message) : validationError(message);
   router.get('/', validate(incidentListQuerySchema, 'query', listQueryError), c.list);
-  // Spec 007: antes de `/:id`, si no `export` se validaría como id (422).
+  // Las rutas literales van ANTES de `/:id` para que el parámetro no las capture.
+  // Spec 007: exportación CSV. HU-08 (DD-08.5): conteos por tipo.
   router.get('/export', validate(incidentListQuerySchema, 'query'), c.exportCsv);
+  router.get('/counts', c.counts);
   router.get('/:id', validate(incidentIdParamSchema, 'params'), c.get);
 
   return router;

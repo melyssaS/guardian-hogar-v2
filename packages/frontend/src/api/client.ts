@@ -1,5 +1,6 @@
 import type {
   Incident,
+  IncidentCounts,
   IncidentDetail,
   MoveCommand,
   MoveResponse,
@@ -167,6 +168,8 @@ export const incidentsApi = {
   get: (id: number) => request<IncidentDetail>(`/api/incidents/${id}`),
   /** HU-07 (spec 007): CSV generado por el backend; la vista no filtra por robot (CA-07.10). */
   exportCsv: () => requestBlob('/api/incidents/export', 'incidentes.csv'),
+  // HU-08: conteo global por tipo; sin parámetros (DD-08.6/DD-08.9, H-7).
+  counts: () => request<IncidentCounts>('/api/incidents/counts'),
 };
 
 export type IncidentsApi = typeof incidentsApi;

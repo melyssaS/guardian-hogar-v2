@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { incidentsApi, type IncidentsApi } from '../api/client';
-import type { Incident, IncidentDetail, Severity } from '../types';
+import type { Incident, IncidentCounts, IncidentDetail, Severity } from '../types';
 import { messageOf, type OperationState } from './useRobot';
 
-export type IncidentsOperation = 'list' | 'detail' | 'export';
+export type IncidentsOperation = 'list' | 'detail' | 'export' | 'counts';
 
 const idle: OperationState = { loading: false, error: null };
+
+/** Conteos vacíos iniciales: las 3 categorías en 0 llegan de la API; aquí solo evitamos `null`. */
+const emptyCounts: IncidentCounts = { total: 0, byType: [] };
 
 /**
  * Lista y detalle de incidentes (spec 003 RF-09) con filtro opcional por severidad (spec 006,
@@ -23,10 +26,12 @@ export function useIncidents(api: IncidentsApi = incidentsApi) {
   const [detail, setDetail] = useState<IncidentDetail | null>(null);
   const [severity, setSeverityState] = useState<Severity | null>(null);
   const [activeSeverity, setActiveSeverity] = useState<Severity | null>(null);
+  const [counts, setCounts] = useState<IncidentCounts>(emptyCounts);
   const [status, setStatus] = useState<Record<IncidentsOperation, OperationState>>({
     list: { loading: true, error: null },
     detail: idle,
     export: idle,
+    counts: { loading: true, error: null },
   });
   const latestRequest = useRef(0);
   const currentSeverity = useRef<Severity | null>(null);
@@ -47,6 +52,16 @@ export function useIncidents(api: IncidentsApi = incidentsApi) {
       } catch (err) {
         if (requestId !== latestRequest.current) return;
         setOp('list', { loading: false, error: messageOf(err) });
+      }
+      // HU-08: los conteos se recargan junto con la lista (al montar/remontar, CA-08.7). Son
+      // globales (no dependen del filtro de severidad) y su carga/error quedan AISLADOS en
+      // status.counts; no se mezclan con list/detail ni con el callout global (H-5, CA-08.9).
+      setOp('counts', { loading: true, error: null });
+      try {
+        setCounts(await api.counts());
+        setOp('counts', idle);
+      } catch (err) {
+        setOp('counts', { loading: false, error: messageOf(err) });
       }
     },
     [api],
@@ -108,6 +123,7 @@ export function useIncidents(api: IncidentsApi = incidentsApi) {
   return {
     incidents,
     detail,
+    counts,
     status,
     severity,
     activeSeverity,

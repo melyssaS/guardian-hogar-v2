@@ -1,3 +1,4 @@
+import { IncidentCounts } from '../components/IncidentCounts';
 import { IncidentDetail } from '../components/IncidentDetail';
 import { IncidentSeverityFilter } from '../components/IncidentSeverityFilter';
 import { IncidentTable } from '../components/IncidentTable';
@@ -11,6 +12,7 @@ export function IncidentsPage() {
   const {
     incidents,
     detail,
+    counts,
     status,
     severity,
     activeSeverity,
@@ -19,6 +21,7 @@ export function IncidentsPage() {
     select,
     exportCsv,
   } = useIncidents();
+  // HU-08: el error de conteos NO entra aquí; lo resuelve <IncidentCounts> (H-5, CA-08.9).
   const error = status.list.error ?? status.detail.error ?? status.export.error;
   const exporting = status.export.loading;
   // La severidad activa es la de la última respuesta recibida; la página solo elige el mensaje.
@@ -81,6 +84,9 @@ export function IncidentsPage() {
               {exporting ? 'Exportando…' : 'Exportar CSV · HU-07'}
             </button>
           </div>
+          {/* HU-08: conteos de incidentes por tipo. Solo muestra; resuelve su carga/error local. */}
+          <div className="spacer" />
+          <IncidentCounts counts={counts} status={status.counts} />
           <IncidentTable
             incidents={incidents}
             selectedId={detail?.id ?? null}

@@ -47,6 +47,22 @@ function install(opts: {
 }) {
   const all = opts.all ?? ALL;
   const fetchMock = vi.fn(async (url: string) => {
+    // HU-08: conteos globales por tipo. Se responden con un objeto válido para que las tarjetas
+    // de conteo no muestren un alert propio que interfiera con las aserciones de HU-06.
+    if (url === '/api/incidents/counts') {
+      const rules = ['R-ZONA-01', 'R-SIGNAL-01', 'R-DATA-01'] as const;
+      const titles: Record<(typeof rules)[number], string> = {
+        'R-ZONA-01': 'No circular por zonas restringidas',
+        'R-SIGNAL-01': 'Posición no confiable o ausente',
+        'R-DATA-01': 'Información de zonas no disponible',
+      };
+      const byType = rules.map((rule) => ({
+        rule,
+        title: titles[rule],
+        count: all.filter((i) => i.rule === rule).length,
+      }));
+      return json({ total: byType.reduce((n, t) => n + t.count, 0), byType });
+    }
     const list = /^\/api\/incidents(?:\?severity=(\w+))?$/.exec(url);
     if (list) {
       const severity = list[1];
@@ -160,7 +176,9 @@ describe('IncidentsPage con filtro por severidad (HU-06)', () => {
 
     await userEvent.click(reset);
     await waitFor(() => expect(dataRows()).toHaveLength(4));
-    expect(urls(fetchMock).at(-1)).toBe('/api/incidents');
+    // La recarga global de conteos (HU-08) también llega a /api/incidents/counts; aquí
+    // verificamos la última petición de LISTA, ignorando /counts.
+    expect(urls(fetchMock).filter((u) => !u.endsWith('/counts')).at(-1)).toBe('/api/incidents');
     expect(reset).toBeDisabled();
     expect(screen.getByRole('combobox', { name: 'Filtrar por severidad' })).toHaveValue('');
   });
@@ -176,7 +194,8 @@ describe('IncidentsPage con filtro por severidad (HU-06)', () => {
     await userEvent.selectOptions(select, 'Todas');
 
     await waitFor(() => expect(dataRows()).toHaveLength(4));
-    expect(urls(fetchMock).at(-1)).toBe('/api/incidents');
+    // Ignora /api/incidents/counts (recarga global de conteos de HU-08); verifica la lista.
+    expect(urls(fetchMock).filter((u) => !u.endsWith('/counts')).at(-1)).toBe('/api/incidents');
     expect(screen.getByRole('button', { name: 'Restablecer filtro' })).toBeDisabled();
   });
 

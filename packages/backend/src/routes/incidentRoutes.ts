@@ -14,6 +14,8 @@ export function createIncidentRoutes(
   const router = Router();
 
   router.get('/', validate(incidentListQuerySchema, 'query'), c.list);
+  // HU-08: /counts debe ir ANTES de /:id para que el parámetro `:id` no capture "counts" (DD-08.5).
+  router.get('/counts', c.counts);
   router.get('/:id', validate(incidentIdParamSchema, 'params'), c.get);
 
   return router;

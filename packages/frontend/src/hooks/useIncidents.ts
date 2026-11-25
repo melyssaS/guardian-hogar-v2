@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { incidentsApi, type IncidentsApi } from '../api/client';
-import type { Incident, IncidentDetail } from '../types';
+import type { Incident, IncidentCounts, IncidentDetail } from '../types';
 import { messageOf, type OperationState } from './useRobot';
 
-export type IncidentsOperation = 'list' | 'detail';
+export type IncidentsOperation = 'list' | 'detail' | 'counts';
 
 const idle: OperationState = { loading: false, error: null };
+
+/** Conteos vacíos iniciales: las 3 categorías en 0 llegan de la API; aquí solo evitamos `null`. */
+const emptyCounts: IncidentCounts = { total: 0, byType: [] };
 
 /**
  * Lista y detalle de incidentes (spec 003 RF-09). Solo lectura: pide y expone lo que devuelve la
@@ -14,9 +17,11 @@ const idle: OperationState = { loading: false, error: null };
 export function useIncidents(api: IncidentsApi = incidentsApi) {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [detail, setDetail] = useState<IncidentDetail | null>(null);
+  const [counts, setCounts] = useState<IncidentCounts>(emptyCounts);
   const [status, setStatus] = useState<Record<IncidentsOperation, OperationState>>({
     list: { loading: true, error: null },
     detail: idle,
+    counts: { loading: true, error: null },
   });
 
   const setOp = (op: IncidentsOperation, state: OperationState) =>
@@ -29,6 +34,16 @@ export function useIncidents(api: IncidentsApi = incidentsApi) {
       setOp('list', idle);
     } catch (err) {
       setOp('list', { loading: false, error: messageOf(err) });
+    }
+    // HU-08: los conteos se cargan en el mismo refresh (al montar/remontar, CA-08.7). Su carga y
+    // error quedan AISLADOS en status.counts; no se mezclan con list/detail ni con el callout
+    // global de la página (H-5, CA-08.9).
+    setOp('counts', { loading: true, error: null });
+    try {
+      setCounts(await api.counts());
+      setOp('counts', idle);
+    } catch (err) {
+      setOp('counts', { loading: false, error: messageOf(err) });
     }
   }, [api]);
 
@@ -50,5 +65,5 @@ export function useIncidents(api: IncidentsApi = incidentsApi) {
     [api],
   );
 
-  return { incidents, detail, status, refresh, select };
+  return { incidents, detail, counts, status, refresh, select };
 }

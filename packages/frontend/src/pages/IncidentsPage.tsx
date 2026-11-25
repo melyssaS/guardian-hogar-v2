@@ -1,10 +1,12 @@
+import { IncidentCounts } from '../components/IncidentCounts';
 import { IncidentDetail } from '../components/IncidentDetail';
 import { IncidentTable } from '../components/IncidentTable';
 import { useIncidents } from '../hooks/useIncidents';
 
 /** Vista "Incidentes" (HU-05, parte UI): bitácora y detalle, solo lectura (spec 003 RF-09). */
 export function IncidentsPage() {
-  const { incidents, detail, status, select } = useIncidents();
+  const { incidents, detail, counts, status, select } = useIncidents();
+  // HU-08: el error de conteos NO entra aquí; lo resuelve <IncidentCounts> (H-5, CA-08.9).
   const error = status.list.error ?? status.detail.error;
 
   return (
@@ -63,8 +65,13 @@ export function IncidentsPage() {
             >
               Exportar CSV · HU-07 ⌛
             </button>
+            {/* HU-06: filtrar por severidad — reservado para demo en vivo */}
+            {/* HU-07: exportar CSV — reservado para demo en vivo */}
             <span className="note-line">Estas historias están reservadas, no implementadas.</span>
           </div>
+          {/* HU-08: conteos de incidentes por tipo. Solo muestra; resuelve su carga/error local. */}
+          <div className="spacer" />
+          <IncidentCounts counts={counts} status={status.counts} />
           <IncidentTable
             incidents={incidents}
             selectedId={detail?.id ?? null}

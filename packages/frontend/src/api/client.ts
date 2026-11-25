@@ -1,5 +1,6 @@
 import type {
   Incident,
+  IncidentCounts,
   IncidentDetail,
   MoveCommand,
   MoveResponse,
@@ -128,6 +129,8 @@ export const incidentsApi = {
   list: (robotId?: number) =>
     request<Incident[]>(`/api/incidents${robotId === undefined ? '' : `?robotId=${robotId}`}`),
   get: (id: number) => request<IncidentDetail>(`/api/incidents/${id}`),
+  // HU-08: conteo global por tipo; sin parámetros (DD-08.6/DD-08.9, H-7).
+  counts: () => request<IncidentCounts>('/api/incidents/counts'),
 };
 
 export type IncidentsApi = typeof incidentsApi;

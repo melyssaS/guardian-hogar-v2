@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IncidentsPage } from '../../src/pages/IncidentsPage';
-import type { Incident, IncidentDetail, Zone } from '../../src/types';
+import type { Incident, IncidentCounts, IncidentDetail, Zone } from '../../src/types';
 
 // Spec 003 — RC-16/RC-17 (RF-09.1..RF-09.6; CA-03.15, CA-03.26, CA-03.27).
 const stairs: Zone = {
@@ -52,9 +52,34 @@ const json = (body: unknown, status = 200) =>
     headers: { 'Content-Type': 'application/json' },
   });
 
-function install(incidents: Incident[], failList = false) {
+/** Conteos derivados de una lista, en el orden del catálogo (lo que devolvería el backend). */
+function countsOf(incidents: Incident[]): IncidentCounts {
+  const rules: { rule: IncidentCounts['byType'][number]['rule']; title: string }[] = [
+    { rule: 'R-ZONA-01', title: 'No circular por zonas restringidas' },
+    { rule: 'R-SIGNAL-01', title: 'Posición no confiable o ausente' },
+    { rule: 'R-DATA-01', title: 'Información de zonas no disponible' },
+  ];
+  const byType = rules.map((r) => ({
+    ...r,
+    count: incidents.filter((i) => i.rule === r.rule).length,
+  }));
+  return { total: byType.reduce((n, t) => n + t.count, 0), byType };
+}
+
+interface InstallOptions {
+  failList?: boolean;
+  failCounts?: boolean;
+}
+
+function install(incidents: Incident[], options: InstallOptions = {}) {
+  const { failList = false, failCounts = false } = options;
   const detail = (i: Incident): IncidentDetail => ({ ...i, zonesSnapshot: [stairs] });
   const fetchMock = vi.fn(async (url: string) => {
+    if (url === '/api/incidents/counts') {
+      return failCounts
+        ? json({ code: 'INTERNAL_ERROR', message: 'Fallo conteos' }, 500)
+        : json(countsOf(incidents));
+    }
     if (url === '/api/incidents') {
       return failList ? json({ code: 'INTERNAL_ERROR', message: 'Fallo' }, 500) : json(incidents);
     }
@@ -147,8 +172,55 @@ describe('IncidentsPage', () => {
   });
 
   it('muestra el error de la API si falla la carga', async () => {
-    install([], true);
+    install([], { failList: true });
     render(<IncidentsPage />);
     expect(await screen.findByRole('alert')).toHaveTextContent('INTERNAL_ERROR');
+  });
+
+  it('CA-08.6 al montar pide conteos y los muestra en el marcador de HU-08', async () => {
+    const fetchMock = install([zoneIncident, zoneIncident, signalIncident]);
+    render(<IncidentsPage />);
+
+    const counts = await screen.findByTestId('incident-counts');
+    expect(fetchMock).toHaveBeenCalledWith('/api/incidents/counts', expect.anything());
+    expect(within(counts).getByTestId('count-R-ZONA-01')).toHaveTextContent('2');
+    expect(within(counts).getByTestId('count-R-SIGNAL-01')).toHaveTextContent('1');
+    expect(within(counts).getByTestId('count-R-DATA-01')).toHaveTextContent('0');
+    expect(within(counts).getByTestId('count-total')).toHaveTextContent('3');
+  });
+
+  it('CA-08.7 al volver a montar pide los conteos de nuevo y refleja el valor vigente', async () => {
+    const first = install([zoneIncident]);
+    const view = render(<IncidentsPage />);
+    const counts1 = await screen.findByTestId('incident-counts');
+    expect(within(counts1).getByTestId('count-total')).toHaveTextContent('1');
+    expect(first).toHaveBeenCalledWith('/api/incidents/counts', expect.anything());
+
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    const second = install([zoneIncident, signalIncident]);
+    render(<IncidentsPage />);
+    const counts2 = await screen.findByTestId('incident-counts');
+    expect(second).toHaveBeenCalledWith('/api/incidents/counts', expect.anything());
+    expect(within(counts2).getByTestId('count-total')).toHaveTextContent('2');
+  });
+
+  it('CA-08.9 el error de conteos se muestra en IncidentCounts y no afecta tabla ni callout global', async () => {
+    install([zoneIncident], { failCounts: true });
+    render(<IncidentsPage />);
+
+    // La tabla carga con normalidad pese al fallo de los conteos.
+    expect(await screen.findByRole('table')).toBeInTheDocument();
+    expect(screen.getByTestId('incident-counter')).toHaveTextContent('1 eventos');
+
+    const countsError = await screen.findByTestId('counts-error');
+    expect(countsError).toHaveTextContent('INTERNAL_ERROR');
+
+    // El callout global de la página (status.list/detail) no se activa por el fallo de conteos.
+    const alerts = screen.getAllByRole('alert');
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toBe(countsError);
+    expect(screen.queryByTestId('incident-counts')).not.toBeInTheDocument();
   });
 });

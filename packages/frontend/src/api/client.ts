@@ -41,24 +41,53 @@ function isErrorBody(value: unknown): value is { code: string; message: string }
   );
 }
 
-/** Única puerta de salida HTTP del frontend. */
-export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  let res: Response;
+/** `fetch` al backend; un fallo de red se convierte en `NETWORK_ERROR`. */
+async function send(path: string, init: RequestInit): Promise<Response> {
   try {
-    res = await fetch(`${BASE_URL}${path}`, {
+    return await fetch(`${BASE_URL}${path}`, {
       ...init,
       headers: { 'Content-Type': 'application/json', ...init.headers },
     });
   } catch {
     throw new ApiError(0, 'NETWORK_ERROR', 'No se pudo conectar con el servidor');
   }
+}
+
+/** Traduce una respuesta no-OK al `ApiError` con el `{ code, message }` del backend. */
+function toApiError(status: number, body: unknown): ApiError {
+  if (isErrorBody(body)) return new ApiError(status, body.code, body.message, body);
+  return new ApiError(status, 'HTTP_ERROR', `Error HTTP ${status}`, body);
+}
+
+/** Única puerta de salida HTTP del frontend. */
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await send(path, init);
   if (res.status === 204) return undefined as T;
   const body: unknown = await res.json().catch(() => null);
-  if (!res.ok) {
-    if (isErrorBody(body)) throw new ApiError(res.status, body.code, body.message, body);
-    throw new ApiError(res.status, 'HTTP_ERROR', `Error HTTP ${res.status}`, body);
-  }
+  if (!res.ok) throw toApiError(res.status, body);
   return body as T;
+}
+
+/** Archivo descargado del backend tal cual llega, con su nombre (spec 007). */
+export interface DownloadedFile {
+  blob: Blob;
+  filename: string;
+}
+
+/** `filename="…"` de `Content-Disposition`, o `fallback` si no se puede leer (CA-07.10). */
+function filenameOf(res: Response, fallback: string): string {
+  const header = res.headers.get('Content-Disposition') ?? '';
+  return /filename="([^"]+)"/.exec(header)?.[1] ?? fallback;
+}
+
+/**
+ * Pide un archivo con el mismo manejo de errores que `request` (spec 007, I-4). El `Blob` es el
+ * cuerpo recibido, sin transformar (CA-07.11).
+ */
+export async function requestBlob(path: string, fallbackName: string): Promise<DownloadedFile> {
+  const res = await send(path, {});
+  if (!res.ok) throw toApiError(res.status, await res.json().catch(() => null));
+  return { blob: await res.blob(), filename: filenameOf(res, fallbackName) };
 }
 
 export const zonesApi = {
@@ -128,6 +157,8 @@ export const incidentsApi = {
   list: (robotId?: number) =>
     request<Incident[]>(`/api/incidents${robotId === undefined ? '' : `?robotId=${robotId}`}`),
   get: (id: number) => request<IncidentDetail>(`/api/incidents/${id}`),
+  /** HU-07 (spec 007): CSV generado por el backend; la vista no filtra por robot (CA-07.10). */
+  exportCsv: () => requestBlob('/api/incidents/export', 'incidentes.csv'),
 };
 
 export type IncidentsApi = typeof incidentsApi;

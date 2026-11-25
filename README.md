@@ -44,6 +44,9 @@ Cada spec contiene `requirements.md`, `design.md` y `tasks.md`.
 | [`001-restricted-zones`](.kiro/specs/001-restricted-zones)       | HU-02                     | Plano 2D y gestión de zonas restringidas      |
 | [`002-safety-guardian`](.kiro/specs/002-safety-guardian)         | HU-04, HU-05              | Vigilante, máquina de estados e incidentes    |
 | [`003-movement-simulation`](.kiro/specs/003-movement-simulation) | HU-03 (y HU-01 por RC-01) | Simulación de movimiento y catálogo de robots |
+| [`007-export-incidents-csv`](specs/007-export-incidents-csv)     | HU-07 (demo en vivo)      | Exportar incidentes a CSV                     |
+
+Las specs de la demo en vivo están en `specs/` y se numeran por HU (007 = HU-07).
 
 Backlog:
 

@@ -17,6 +17,7 @@ import { createIncidentRoutes } from './routes/incidentRoutes.js';
 import { createRobotsRoutes } from './routes/robotsRoutes.js';
 import { createZoneRoutes } from './routes/zoneRoutes.js';
 import { createGuardianService } from './services/guardianService.js';
+import { createIncidentExportService } from './services/incidentExportService.js';
 import { createRobotCatalogService } from './services/robotCatalogService.js';
 import { createSessionService } from './services/sessionService.js';
 import { createZoneService } from './services/zoneService.js';
@@ -40,7 +41,8 @@ export function createApp(db: Db, options: AppOptions = {}): Express {
   const app = express();
   app.disable('x-powered-by');
   app.use(helmet());
-  app.use(cors({ origin: corsOrigins }));
+  // Spec 007 (CA-07.5): el frontend en otro origen (Render) necesita leer el nombre del CSV.
+  app.use(cors({ origin: corsOrigins, exposedHeaders: ['Content-Disposition'] }));
   app.use(express.json({ limit: '10kb' }));
   app.use(
     '/api',
@@ -104,9 +106,19 @@ export function createApp(db: Db, options: AppOptions = {}): Express {
     createRobotsRoutes({ catalog: robotCatalogService, sessions: sessionService }),
   );
   app.use('/api/robots/:robotId', createGuardianRoutes(guardianService));
+  const incidentCatalog = createRobotCatalogRepository(db);
   app.use(
     '/api/incidents',
-    createIncidentRoutes(incidentRepository, createRobotCatalogRepository(db)),
+    createIncidentRoutes(
+      incidentRepository,
+      incidentCatalog,
+      // HU-07 (spec 007): exportación CSV de solo lectura con el reloj del sistema.
+      createIncidentExportService({
+        incidents: incidentRepository,
+        catalog: incidentCatalog,
+        now: () => new Date(),
+      }),
+    ),
   );
 
   app.use('/api', (_req, res) => {

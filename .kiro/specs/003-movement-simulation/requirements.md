@@ -229,7 +229,7 @@ revisar el comportamiento del Guardián.
 1. WHEN el operador abre la vista "Incidentes" THEN la UI SHALL listar los incidentes de `GET /api/incidents` del más reciente al más antiguo, en una tabla Fecha · Robot · Regla · Zona · Decisión, con el contador "N eventos".
 2. WHEN el operador selecciona un incidente THEN la UI SHALL mostrar su detalle (`GET /api/incidents/:id`): regla, código de decisión, tipo de colisión, origen, destino, estado resultante, motivo y snapshot de zonas.
 3. WHEN no hay incidentes THEN la UI SHALL mostrar un estado vacío explícito.
-4. WHEN se muestran los botones "Filtrar por severidad · HU-06" y "Exportar CSV · HU-07" THEN SHALL estar deshabilitados (HU reservadas), como en el prototipo. **[007]** Para HU-07: sustituido por la spec 007 CA-07.10 (el botón "Exportar CSV · HU-07" se habilita); HU-06 sigue deshabilitado (007 CA-07.14).
+4. WHEN se muestra la vista "Incidentes" THEN el botón "Filtrar por severidad · HU-06" SHALL estar reemplazado por el filtro por severidad y el botón "Exportar CSV · HU-07" SHALL estar habilitado. *(Actualizado: HU-06 por spec 006 — el botón deshabilitado se reemplaza por el filtro; HU-07 por spec 007 CA-07.10 — el botón se habilita.)*
 5. WHEN la UI muestra un incidente THEN NO SHALL modificarlo ni recalcularlo: es de solo lectura.
 6. **[RC-01 rev2]** WHEN existe un incidente por pérdida de señal (`rule = R-SIGNAL-01`, `decisionCode = POSITION_QUALITY_LOST`, sin zona) THEN la tabla SHALL mostrarlo como cualquier otro, con "—" en la columna Zona.
 
@@ -385,6 +385,7 @@ Respuesta `DENIED_SAFE_STOP` (409):
 | 409 | `DUPLICATE_EVENT` | **[RC-01]** `sequence` duplicada o fuera de orden en la sesión |
 | 409 | `RECOVERY_NOT_ALLOWED` | **[RC-01]** `recover` rechazado; incluye `cause` (spec 002) |
 | 422 | `INVALID_MOVE_REQUEST` | **[RC-01 rev2]** Payload de `POST /api/robots/:robotId/move` inválido (sustituye a `INVALID_DESTINATION` en el endpoint nuevo) |
+| 422 | `INVALID_SEVERITY_FILTER` | **[spec 006]** `severity` de `GET /api/incidents` distinta de `LOW`, `MEDIUM`, `HIGH` o `CRITICAL` (un `robotId` inválido conserva `VALIDATION_ERROR`) |
 | 409 | `ROBOT_START_IN_RESTRICTED_ZONE` | **[RC-01 rev2]** La posición inicial del robot cae en una zona activa; no se crea nada; auditado |
 | 409 | `ROBOT_START_NOT_VERIFIABLE` | **[RC-01 rev4]** Las zonas no se pueden leer al validar la posición inicial; incluye `cause: ZONE_DATA_UNAVAILABLE`; no se crea nada; auditado (decisión humana) |
 | 409 | `POSITION_CONFLICT` | **[RC-01 rev2]** Lectura `RELIABLE` con una posición distinta de la actual (spec 002); la UI lo muestra tal cual |
@@ -514,8 +515,9 @@ Cubren los requisitos que no tenían CA (M-6) y las decisiones Q-B, Q-D, Q-E y B
   fila correspondiente en `audit_log` después de la respuesta.
 - **CA-03.26 (R9.3)** Dada una base sin incidentes, cuando el operador abre "Incidentes",
   entonces ve un estado vacío explícito y el contador "0 eventos".
-- **CA-03.27 (R9.4)** Dada la vista "Incidentes", cuando se muestra, entonces los botones
-  "Filtrar por severidad · HU-06" y "Exportar CSV · HU-07" están deshabilitados. **[007]** HU-07: sustituido por la spec 007 CA-07.10; queda solo HU-06 deshabilitado (007 CA-07.14).
+- **CA-03.27 (R9.4)** Dada la vista "Incidentes", cuando se muestra, entonces el filtro por severidad
+  reemplaza al botón "Filtrar por severidad · HU-06" y el botón "Exportar CSV · HU-07" está habilitado.
+  *(Actualizado por spec 006: ya no hay botón HU-06 deshabilitado; y por spec 007 CA-07.10/CA-07.14: HU-07 habilitada.)*
 - **CA-03.28 (R10.1)** Dada la aplicación abierta, cuando se muestra la barra lateral, entonces
   ofrece Supervisión, Robots simulados, Zonas y reglas e Incidentes, y cada entrada abre su vista.
   **[RC-01 rev3]** Y no ofrece "Visión general" ni ninguna entrada del grupo "Ingeniería · SDD".
@@ -579,8 +581,7 @@ Cubren los requisitos que no tenían CA (M-6) y las decisiones Q-B, Q-D, Q-E y B
 ## 7. Fuera de alcance (reservado)
 
 > **[RC-01]** Siguen fuera de alcance, además de lo de abajo: colisiones entre robots (los
-> robots no se bloquean entre sí; limitación conocida), filtrar y exportar incidentes (HU-06 y
-> HU-07, botones deshabilitados) y el botón "Perder conexión" mientras no se resuelva la
+> robots no se bloquean entre sí; limitación conocida) y el botón "Perder conexión" mientras no se resuelva la
 > pregunta Q-B. *(Lo del botón queda sustituido por RC-01 rev2/rev3: Q-B resuelta, R10.6.)* Los estados `DEGRADED` y `RECOVERING` dejan de estar "fuera": la UI los
 > **muestra** cuando la API los devuelve, aunque no los provoque.
 
@@ -616,7 +617,7 @@ Cubren los requisitos que no tenían CA (M-6) y las decisiones Q-B, Q-D, Q-E y B
 | Supervisión en vivo (HU-03/04/05) | Esta spec: R8, R10, R11; vigilante de la spec 002 |
 | Robots simulados (HU-01) | Esta spec: R7 |
 | Zonas y reglas (HU-02) | Spec 001 |
-| Incidentes (HU-05; filtros HU-06/07 deshabilitados) | Esta spec: R9; contrato de la spec 002 |
+| Incidentes (HU-05; filtro HU-06 en spec 006; HU-07 deshabilitada) | Esta spec: R9; contrato de la spec 002 |
 | Visión general | **Fuera de alcance** (rev3) |
 | Ingeniería · SDD: Backlog, Proceso SDD, Agentes de IA, Arquitectura, DevOps | **Fuera de alcance** (rev3) |
 

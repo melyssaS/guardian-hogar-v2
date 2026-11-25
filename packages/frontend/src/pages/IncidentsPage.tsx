@@ -1,4 +1,5 @@
 import { IncidentDetail } from '../components/IncidentDetail';
+import { IncidentSeverityFilter } from '../components/IncidentSeverityFilter';
 import { IncidentTable } from '../components/IncidentTable';
 import { useIncidents } from '../hooks/useIncidents';
 
@@ -7,9 +8,22 @@ import { useIncidents } from '../hooks/useIncidents';
  * HU-07 (spec 007): exportar CSV; el archivo lo genera el backend.
  */
 export function IncidentsPage() {
-  const { incidents, detail, status, select, exportCsv } = useIncidents();
+  const {
+    incidents,
+    detail,
+    status,
+    severity,
+    activeSeverity,
+    setSeverity,
+    resetSeverity,
+    select,
+    exportCsv,
+  } = useIncidents();
   const error = status.list.error ?? status.detail.error ?? status.export.error;
   const exporting = status.export.loading;
+  // La severidad activa es la de la última respuesta recibida; la página solo elige el mensaje.
+  const emptyMessage =
+    activeSeverity === null ? undefined : `No hay incidentes de severidad ${activeSeverity}.`;
 
   return (
     <>
@@ -50,16 +64,13 @@ export function IncidentsPage() {
               {incidents.length} eventos
             </span>
           </div>
-          <div className="controls">
-            {/* HU-06: filtrar por severidad — reservado para demo en vivo */}
-            <button
-              type="button"
-              className="btn tight"
-              disabled
-              title="HU-06, reservada para la demostración en clase"
-            >
-              Filtrar por severidad · HU-06 ⌛
-            </button>
+          <div className="controls" style={{ paddingBottom: 14 }}>
+            {/* HU-06 (spec 006): filtrar por severidad; ocupa el marcador antes reservado. */}
+            <IncidentSeverityFilter
+              value={severity}
+              onChange={setSeverity}
+              onReset={resetSeverity}
+            />
             <button
               type="button"
               className="btn tight"
@@ -69,12 +80,13 @@ export function IncidentsPage() {
             >
               {exporting ? 'Exportando…' : 'Exportar CSV · HU-07'}
             </button>
-            <span className="note-line">HU-06 está reservada, no implementada.</span>
           </div>
           <IncidentTable
             incidents={incidents}
             selectedId={detail?.id ?? null}
             onSelect={(id) => void select(id)}
+            emptyIsStatus={activeSeverity !== null}
+            {...(emptyMessage === undefined ? {} : { emptyMessage })}
           />
         </div>
 

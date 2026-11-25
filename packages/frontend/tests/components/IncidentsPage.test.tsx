@@ -24,6 +24,7 @@ const zoneIncident: Incident = {
   rule: 'R-ZONA-01',
   zoneName: 'Escaleras',
   decisionCode: 'RESTRICTED_ZONE_VIOLATION',
+  severity: 'HIGH',
   collisionType: 'RESTRICTED_ZONE_VIOLATION',
   stateAfter: 'SAFE_STOP',
   origin: { x: 120, y: 90 },
@@ -39,6 +40,7 @@ const signalIncident: Incident = {
   rule: 'R-SIGNAL-01',
   zoneName: null,
   decisionCode: 'POSITION_QUALITY_LOST',
+  severity: 'LOW',
   collisionType: null,
   stateAfter: 'DEGRADED',
   origin: { x: 488, y: 290 },
@@ -141,14 +143,16 @@ describe('IncidentsPage', () => {
     expect(within(row).getByText('POSITION_QUALITY_LOST')).toBeInTheDocument();
   });
 
-  it('CA-03.27 / CA-07.14 HU-06 sigue deshabilitado y la nota solo menciona HU-06', async () => {
+  // Spec 006 CA-06.9: HU-06 salió de la reserva (filtro por severidad) y HU-07 (spec 007) exporta CSV.
+  it('CA-03.27 / CA-07.14 ninguna historia sigue reservada: filtro HU-06 y exportar HU-07 activos', async () => {
     install([zoneIncident]);
     render(<IncidentsPage />);
     await screen.findByRole('table');
 
-    expect(screen.getByRole('button', { name: /Filtrar por severidad · HU-06/ })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /HU-06/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Filtrar por severidad' })).toBeEnabled();
     expect(screen.getByRole('button', { name: /Exportar CSV · HU-07/ })).toBeEnabled();
-    expect(screen.getByText('HU-06 está reservada, no implementada.')).toBeInTheDocument();
+    expect(screen.queryByText(/reservada, no implementada/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Estas historias están reservadas/)).not.toBeInTheDocument();
   });
 

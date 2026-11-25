@@ -8,7 +8,7 @@ test('HU-07: "Exportar CSV" descarga incidentes-YYYY-MM-DD.csv generado por el b
 }) => {
   await page.goto('/#/incidentes');
   await expect(page.getByRole('table')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Filtrar por severidad · HU-06/ })).toBeDisabled();
+  await expect(page.getByRole('combobox', { name: 'Filtrar por severidad' })).toBeEnabled();
 
   const button = page.getByRole('button', { name: 'Exportar CSV · HU-07' });
   await expect(button).toBeEnabled();

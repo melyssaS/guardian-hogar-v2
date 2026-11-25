@@ -90,6 +90,6 @@ El backend se ejecuta en contenedor para evitar instalar Node, npm o Prisma en l
 - No lógica en controladores
 - No llamadas a Prisma directamente desde controladores
 - No secretos hardcodeados
-- No implementar HU-06 a HU-10 en línea base
+- No implementar HU-07 a HU-10 en línea base (HU-06 se implementa en `specs/006-filter-incidents-by-severity/`)
 - No secretos ni credenciales dentro del Dockerfile — siempre desde `.env`
 - No dejar la base SQLite fuera de un volumen nombrado

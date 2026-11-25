@@ -78,7 +78,7 @@ Esta cadena debe ser demostrable en la sustentación.
 | HU-03 | Línea base | — |
 | HU-04 | Línea base | — |
 | HU-05 | Línea base | — |
-| HU-06 | Reservada demo | Sergio |
+| HU-06 | Spec 006 implementada; pendiente de QA y de registrar su salida de la reserva | Sergio |
 | HU-07 | Reservada demo | Melyssa |
 | HU-08 | Reservada demo | Melyssa |
 | HU-09 | Reservada demo | July |

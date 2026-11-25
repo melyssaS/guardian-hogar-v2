@@ -558,6 +558,23 @@ svg {
   background: #fff3df;
   color: #a96a16;
 }
+/* Severidad de un incidente (spec 006, HU-06): de menor a mayor riesgo. */
+.pill.severity-low {
+  background: #e9f0ff;
+  color: #3164ca;
+}
+.pill.severity-medium {
+  background: #fff3df;
+  color: #a96a16;
+}
+.pill.severity-high {
+  background: #fff0f0;
+  color: #b5444e;
+}
+.pill.severity-critical {
+  background: #b5444e;
+  color: #fff;
+}
 .callout.warn {
   background: #fff9ed;
   border-color: #f5e4cb;

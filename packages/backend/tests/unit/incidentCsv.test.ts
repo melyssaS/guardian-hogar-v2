@@ -16,6 +16,7 @@ function incident(overrides: Partial<Incident> = {}): Incident {
     rule: 'R-ZONA-01',
     zoneName: 'Escaleras',
     decisionCode: 'TRAJECTORY_CROSSES_ZONE',
+    severity: 'HIGH',
     collisionType: 'TRAJECTORY_CROSSES_ZONE',
     stateAfter: 'SAFE_STOP',
     origin: { x: 120, y: 90 },

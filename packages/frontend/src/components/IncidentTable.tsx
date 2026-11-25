@@ -4,7 +4,13 @@ interface IncidentTableProps {
   incidents: Incident[];
   selectedId: number | null;
   onSelect: (id: number) => void;
+  /** Mensaje de la tabla vacía; lo decide la página (la tabla no conoce el filtro). */
+  emptyMessage?: string;
+  /** Anuncia el mensaje vacío a lectores de pantalla (`role="status"`), p. ej. con un filtro activo. */
+  emptyIsStatus?: boolean;
 }
+
+const DEFAULT_EMPTY = 'Sin incidentes registrados. Provoque una denegación desde Supervisión.';
 
 /** Fecha legible en la zona horaria del navegador; no altera el dato de la API. */
 const formatDate = (iso: string) => {
@@ -13,7 +19,13 @@ const formatDate = (iso: string) => {
 };
 
 /** Bitácora de incidentes (RF-09.1, RF-09.6): Fecha · Robot · Regla · Zona · Decisión. */
-export function IncidentTable({ incidents, selectedId, onSelect }: IncidentTableProps) {
+export function IncidentTable({
+  incidents,
+  selectedId,
+  onSelect,
+  emptyMessage = DEFAULT_EMPTY,
+  emptyIsStatus = false,
+}: IncidentTableProps) {
   return (
     <div className="tablewrap">
       <table>
@@ -30,7 +42,7 @@ export function IncidentTable({ incidents, selectedId, onSelect }: IncidentTable
           {incidents.length === 0 ? (
             <tr>
               <td colSpan={5} className="empty">
-                Sin incidentes registrados. Provoque una denegación desde Supervisión.
+                {emptyIsStatus ? <span role="status">{emptyMessage}</span> : emptyMessage}
               </td>
             </tr>
           ) : (
@@ -57,6 +69,12 @@ export function IncidentTable({ incidents, selectedId, onSelect }: IncidentTable
                 <td>
                   <span className={i.rule === 'R-SIGNAL-01' ? 'pill warn' : 'pill danger'}>
                     {i.decisionCode}
+                  </span>{' '}
+                  <span
+                    className={`pill severity-${i.severity.toLowerCase()}`}
+                    data-severity={i.severity}
+                  >
+                    {i.severity}
                   </span>
                 </td>
               </tr>

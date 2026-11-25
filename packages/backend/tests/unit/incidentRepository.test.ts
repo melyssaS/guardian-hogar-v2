@@ -145,6 +145,73 @@ describe('incidentRepository (RC-14: robot, regla, zona)', () => {
   });
 });
 
+// Spec 006 — HU-06, tarea 3 (CA-06.1, CA-06.6, CA-06.7). Fixture A de requirements §5.
+describe('incidentRepository: severidad derivada y filtro (spec 006)', () => {
+  let repo: IncidentRepository;
+  beforeEach(() => {
+    repo = createIncidentRepository(createTestDb());
+    const make = (robotId: number, decisionCode: IncidentInput['decisionCode'], reason: string) =>
+      repo.create({
+        ...baseInput,
+        robotId,
+        decisionCode,
+        collisionType: null,
+        zoneName: null,
+        zonesSnapshot: [],
+        reason,
+      });
+    make(1, 'ORIGIN_IN_RESTRICTED_ZONE', 'critical-r1');
+    make(1, 'RESTRICTED_ZONE_VIOLATION', 'high-r1');
+    make(1, 'POSITION_QUALITY_LOST', 'low-r1');
+    make(2, 'ZONE_DATA_UNAVAILABLE', 'high-r2');
+    make(2, 'TRAJECTORY_CROSSES_ZONE', 'medium-r2');
+  });
+
+  it('CA-06.6 findAll y findById devuelven severity derivada del decisionCode', () => {
+    expect(repo.findAll().map((i) => [i.reason, i.severity])).toEqual([
+      ['medium-r2', 'MEDIUM'],
+      ['high-r2', 'HIGH'],
+      ['low-r1', 'LOW'],
+      ['high-r1', 'HIGH'],
+      ['critical-r1', 'CRITICAL'],
+    ]);
+    expect(repo.findById(1)?.severity).toBe('CRITICAL');
+    expect(repo.findById(4)?.severity).toBe('HIGH');
+  });
+
+  it('CA-06.1 findAll({ severity }) devuelve solo ese nivel, del más reciente al más antiguo', () => {
+    expect(repo.findAll({ severity: 'HIGH' }).map((i) => i.reason)).toEqual(['high-r2', 'high-r1']);
+    expect(repo.findAll({ severity: 'CRITICAL' }).map((i) => i.reason)).toEqual(['critical-r1']);
+    expect(repo.findAll({ severity: 'MEDIUM' }).map((i) => i.reason)).toEqual(['medium-r2']);
+    expect(repo.findAll({ severity: 'LOW' }).map((i) => i.reason)).toEqual(['low-r1']);
+  });
+
+  it('CA-06.7 se combina con robotId', () => {
+    expect(repo.findAll({ robotId: 1, severity: 'HIGH' }).map((i) => i.reason)).toEqual([
+      'high-r1',
+    ]);
+    expect(repo.findAll({ robotId: 2, severity: 'LOW' })).toEqual([]);
+  });
+
+  it('CA-06.4 una severidad sin incidentes devuelve []', () => {
+    const empty = createIncidentRepository(createTestDb());
+    expect(empty.findAll({ severity: 'LOW' })).toEqual([]);
+  });
+
+  it('CA-06.6 las filas anteriores a la migración 009 también traen severity', () => {
+    const db = createDbBefore('009');
+    db.prepare(
+      `INSERT INTO incidents (decision_code, collision_type, state_after, origin_x, origin_y, dest_x, dest_y, zones_snapshot, reason, created_at)
+       VALUES ('MISSING_POSITION', NULL, 'DEGRADED', 1, 2, 3, 4, '[]', 'antiguo', '2025-03-04 05:06:08')`,
+    ).run();
+    migrate(db);
+    const old = createIncidentRepository(db);
+    expect(old.findAll()[0]?.severity).toBe('MEDIUM');
+    expect(old.findAll({ severity: 'MEDIUM' })).toHaveLength(1);
+    expect(old.findAll({ severity: 'HIGH' })).toHaveLength(0);
+  });
+});
+
 describe('incidentRepository con incidentes anteriores al refuerzo (filas antiguas)', () => {
   it('robotId y robotName nulos, rule derivada del decision_code y fecha en ISO', () => {
     const db = createDbBefore('009');
